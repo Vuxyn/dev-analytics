@@ -1,0 +1,7 @@
+.env
+*.db
+__pycache__/
+node_modules/
+.next/
+.env.local
+*.log
