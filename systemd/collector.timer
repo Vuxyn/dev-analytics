@@ -1,0 +1,18 @@
+[Unit]
+Description=Dev Analytics Collector Timer
+Requires=collector.service
+
+[Timer]
+# Jalan 1 menit setelah boot (biar sistem sudah stabil dulu)
+OnBootSec=1min
+
+# Lalu setiap 15 menit
+OnUnitActiveSec=15min
+
+# Kalau timer terlewat (misal laptop mati), langsung jalan begitu nyala
+Persistent=true
+
+Unit=collector.service
+
+[Install]
+WantedBy=timers.target

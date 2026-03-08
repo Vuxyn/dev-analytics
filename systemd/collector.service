@@ -1,0 +1,26 @@
+[Unit]
+Description=Dev Analytics Collector
+Documentation=https://github.com/Vuxyn/dev-analytics
+# Tunggu network online sebelum jalan (butuh koneksi ke Railway)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=vuxyn
+
+# Path ke collect.sh
+ExecStart=/home/vuxyn/projects/dev-analytics/collector/collect.sh
+
+# Logging ke systemd journal
+StandardOutput=journal
+StandardError=journal
+
+# Kalau gagal, jangan retry otomatis (timer yang handle scheduling)
+Restart=no
+
+# Timeout maksimal 5 menit per run
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

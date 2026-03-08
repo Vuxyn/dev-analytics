@@ -2,7 +2,7 @@
 # collect.sh
 # Script utama collector — scan semua repo, extract commit, tulis ke PostgreSQL
 
-set -euo pipefail
+set -uo pipefail
 
 # ============================================
 # Load config dan environment
@@ -36,19 +36,29 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Jalanin query SQL ke PostgreSQL
+# Jalanin query SQL, return satu nilai bersih
 db_query() {
-    psql "$DATABASE_URL" -t -c "$1" 2>/dev/null | xargs
+    psql "$DATABASE_URL" -t -A -c "$1" 2>/dev/null | head -1 | xargs
 }
 
-# Jalanin query dan return hasil mentah (tanpa xargs)
-db_query_raw() {
-    psql "$DATABASE_URL" -t -c "$1" 2>/dev/null
+# Jalanin query tanpa return value (INSERT, UPDATE, DELETE)
+db_exec() {
+    psql "$DATABASE_URL" -t -A -c "$1" 2>/dev/null
 }
 
 # Escape single quote untuk SQL
 escape_sql() {
     echo "${1//\'/\'\'}"
+}
+
+# Convert timestamp ke format ISO yang git mengerti
+to_git_date() {
+    local ts="$1"
+    if [[ -z "$ts" || "$ts" == "1970-01-01 00:00:00" ]]; then
+        echo "1970-01-01T00:00:00"
+        return
+    fi
+    date -d "$ts" '+%Y-%m-%dT%H:%M:%S' 2>/dev/null || echo "1970-01-01T00:00:00"
 }
 
 # ============================================
@@ -66,7 +76,7 @@ for REPO_PATH in "${REPOS[@]}"; do
     REPO_NAME=$(basename "$REPO_PATH")
     log "Processing repo: $REPO_NAME ($REPO_PATH)"
 
-    # Fetch semua branch dari remote supaya data terbaru
+    # Fetch semua branch dari remote
     log "  Fetching all branches..."
     git -C "$REPO_PATH" fetch --all --quiet 2>/dev/null || true
 
@@ -78,33 +88,38 @@ for REPO_PATH in "${REPOS[@]}"; do
     # Insert repo ke database kalau belum ada
     # ============================================
 
-    REPO_ID=$(db_query "
-        SELECT id FROM repositories WHERE path = '$REPO_PATH' LIMIT 1;
-    ")
+    REPO_ID=$(db_query "SELECT id FROM repositories WHERE path = '$REPO_PATH' LIMIT 1;")
 
     if [[ -z "$REPO_ID" ]]; then
         log "  Repo baru, insert ke database..."
-        REPO_ID=$(db_query "
+        REPO_ID=$(psql "$DATABASE_URL" -t -A -c "
             INSERT INTO repositories (name, path, remote_url)
             VALUES ('$REPO_NAME', '$REPO_PATH', '$REMOTE_URL')
             RETURNING id;
-        ")
+        " 2>/dev/null | grep -E '^[0-9]+$' | head -1)
         log "  Repo ID: $REPO_ID"
     else
         log "  Repo sudah ada, ID: $REPO_ID"
     fi
 
+    # Validasi REPO_ID adalah angka
+    if [[ ! "$REPO_ID" =~ ^[0-9]+$ ]]; then
+        log "  [ERROR] REPO_ID tidak valid: '$REPO_ID', skip repo ini"
+        continue
+    fi
+
     # Ambil last_synced untuk incremental sync
-    LAST_SYNCED=$(db_query "
+    LAST_SYNCED_RAW=$(db_query "
         SELECT COALESCE(last_synced::text, '1970-01-01 00:00:00')
         FROM repositories
         WHERE id = $REPO_ID;
     ")
 
+    LAST_SYNCED=$(to_git_date "$LAST_SYNCED_RAW")
     log "  Last synced: $LAST_SYNCED"
 
     # ============================================
-    # Ambil semua branch (lokal + remote)
+    # Ambil semua branch remote
     # ============================================
 
     BRANCHES=$(git -C "$REPO_PATH" branch -r --format='%(refname:short)' 2>/dev/null | \
@@ -113,9 +128,13 @@ for REPO_PATH in "${REPOS[@]}"; do
         grep -v '^origin$' | \
         sort -u)
 
+    if [[ -z "$BRANCHES" ]]; then
+        log "  Tidak ada branch ditemukan, skip"
+        continue
+    fi
+
     TOTAL_COMMITS_ADDED=0
     SYNC_STATUS="success"
-    SYNC_ERROR=""
 
     # ============================================
     # Loop setiap branch
@@ -126,16 +145,8 @@ for REPO_PATH in "${REPOS[@]}"; do
 
         log "  Branch: $BRANCH"
 
-        # Format git log — pakai | sebagai separator field
-        # Format: SHA|author_name|author_email|timestamp|message
         GIT_LOG=$(git -C "$REPO_PATH" log \
             "origin/$BRANCH" \
-            --format="%H|%aN|%aE|%at|%s" \
-            --numstat \
-            --after="$LAST_SYNCED" \
-            2>/dev/null || \
-        git -C "$REPO_PATH" log \
-            "$BRANCH" \
             --format="%H|%aN|%aE|%at|%s" \
             --numstat \
             --after="$LAST_SYNCED" \
@@ -143,7 +154,8 @@ for REPO_PATH in "${REPOS[@]}"; do
 
         [[ -z "$GIT_LOG" ]] && continue
 
-        # Parse output git log
+        log "    Ada data commit, mulai parsing..."
+
         CURRENT_SHA=""
         CURRENT_AUTHOR_NAME=""
         CURRENT_AUTHOR_EMAIL=""
@@ -153,25 +165,24 @@ for REPO_PATH in "${REPOS[@]}"; do
         LINES_REMOVED=0
         FILES_CHANGED=0
 
-        flush_commit() {
+        do_insert_commit() {
             [[ -z "$CURRENT_SHA" ]] && return
+            [[ ! "$CURRENT_TS" =~ ^[0-9]+$ ]] && return
 
-            # Cek apakah SHA sudah ada di database (hindari duplikat)
             EXISTS=$(db_query "SELECT COUNT(*) FROM commits WHERE sha = '$CURRENT_SHA';")
-            if [[ "$EXISTS" -gt 0 ]]; then
+            if [[ "${EXISTS:-0}" -gt 0 ]]; then
                 return
             fi
 
-            # Convert unix timestamp ke format PostgreSQL
-            COMMITTED_AT=$(date -d "@$CURRENT_TS" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || \
-                           date -r "$CURRENT_TS" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)
+            COMMITTED_AT=$(date -d "@$CURRENT_TS" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)
+            [[ -z "$COMMITTED_AT" ]] && return
 
             SAFE_MSG=$(escape_sql "$CURRENT_MSG")
             SAFE_AUTHOR=$(escape_sql "$CURRENT_AUTHOR_NAME")
             SAFE_EMAIL=$(escape_sql "$CURRENT_AUTHOR_EMAIL")
             SAFE_BRANCH=$(escape_sql "$BRANCH")
 
-            db_query "
+            db_exec "
                 INSERT INTO commits (
                     repo_id, sha, branch, author_name, author_email,
                     message, lines_added, lines_removed, files_changed, committed_at
@@ -187,47 +198,39 @@ for REPO_PATH in "${REPOS[@]}"; do
                     $FILES_CHANGED,
                     '$COMMITTED_AT'
                 ) ON CONFLICT (sha) DO NOTHING;
-            " > /dev/null
+            " > /dev/null 2>&1
 
             TOTAL_COMMITS_ADDED=$((TOTAL_COMMITS_ADDED + 1))
-
-            # Reset
-            CURRENT_SHA=""
-            LINES_ADDED=0
-            LINES_REMOVED=0
-            FILES_CHANGED=0
+            log "    Inserted: ${CURRENT_SHA:0:7} — $CURRENT_MSG"
         }
+
+        CURRENT_SHA=""
+        LINES_ADDED=0
+        LINES_REMOVED=0
+        FILES_CHANGED=0
 
         while IFS= read -r LINE; do
             [[ -z "$LINE" ]] && continue
 
-            # Cek apakah ini header commit (ada 4 pipe separator)
             PIPE_COUNT=$(echo "$LINE" | tr -cd '|' | wc -c)
 
             if [[ $PIPE_COUNT -ge 4 ]]; then
-                # Flush commit sebelumnya
-                flush_commit
-
-                # Parse header baru
+                do_insert_commit
                 IFS='|' read -r CURRENT_SHA CURRENT_AUTHOR_NAME CURRENT_AUTHOR_EMAIL CURRENT_TS CURRENT_MSG <<< "$LINE"
+                LINES_ADDED=0
+                LINES_REMOVED=0
+                FILES_CHANGED=0
             else
-                # Ini numstat line: "added\tremoved\tfilepath"
                 ADDED=$(echo "$LINE" | awk '{print $1}')
                 REMOVED=$(echo "$LINE" | awk '{print $2}')
-
-                # Skip binary files (ditandai dengan "-")
-                if [[ "$ADDED" =~ ^[0-9]+$ ]]; then
-                    LINES_ADDED=$((LINES_ADDED + ADDED))
-                fi
-                if [[ "$REMOVED" =~ ^[0-9]+$ ]]; then
-                    LINES_REMOVED=$((LINES_REMOVED + REMOVED))
-                fi
+                if [[ "$ADDED" =~ ^[0-9]+$ ]]; then LINES_ADDED=$((LINES_ADDED + ADDED)); fi
+                if [[ "$REMOVED" =~ ^[0-9]+$ ]]; then LINES_REMOVED=$((LINES_REMOVED + REMOVED)); fi
                 FILES_CHANGED=$((FILES_CHANGED + 1))
             fi
         done <<< "$GIT_LOG"
 
         # Flush commit terakhir
-        flush_commit
+        do_insert_commit
 
     done <<< "$BRANCHES"
 
@@ -236,7 +239,7 @@ for REPO_PATH in "${REPOS[@]}"; do
     # ============================================
 
     log "  Updating daily summary..."
-    db_query "
+    db_exec "
         INSERT INTO daily_summary (repo_id, date, commit_count, lines_added, lines_removed, files_changed, active_hours, branches)
         SELECT
             repo_id,
@@ -257,22 +260,14 @@ for REPO_PATH in "${REPOS[@]}"; do
             files_changed = EXCLUDED.files_changed,
             active_hours  = EXCLUDED.active_hours,
             branches      = EXCLUDED.branches;
-    " > /dev/null
+    " > /dev/null 2>&1
 
-    # ============================================
-    # Update last_synced dan tulis sync_log
-    # ============================================
+    db_exec "UPDATE repositories SET last_synced = NOW() WHERE id = $REPO_ID;" > /dev/null 2>&1
 
-    db_query "
-        UPDATE repositories
-        SET last_synced = NOW()
-        WHERE id = $REPO_ID;
-    " > /dev/null
-
-    db_query "
+    db_exec "
         INSERT INTO sync_log (repo_id, commits_added, status)
         VALUES ($REPO_ID, $TOTAL_COMMITS_ADDED, '$SYNC_STATUS');
-    " > /dev/null
+    " > /dev/null 2>&1
 
     log "  Done. Commits added: $TOTAL_COMMITS_ADDED"
 
