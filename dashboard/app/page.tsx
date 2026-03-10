@@ -44,7 +44,7 @@ export default async function HomePage() {
           Overview
         </h1>
         <p className="text-sm text-zinc-400">
-          Aktivitas coding dari semua branch —{" "}
+          Aktivitas coding dari semua branch, {" "}
           <span className="text-violet-400">bukan cuma master</span>
         </p>
       </div>

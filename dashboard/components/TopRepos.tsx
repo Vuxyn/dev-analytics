@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 
 type Repo = {
   id: number;
@@ -22,6 +25,8 @@ function formatDate(dateStr: string | null): string {
 }
 
 export default function TopRepos({ data }: { data: Repo[] }) {
+  const [page, setPage] = useState(1);
+
   if (!data || data.length === 0) {
     return (
       <div className="text-sm text-zinc-500 font-mono">belum ada data</div>
@@ -30,9 +35,14 @@ export default function TopRepos({ data }: { data: Repo[] }) {
 
   const maxCommits = Math.max(...data.map((r) => r.total_commits), 1);
 
+  const LIMIT = 4;
+  const totalPages = Math.ceil(data.length / LIMIT);
+  const displayData = data.slice((page - 1) * LIMIT, page * LIMIT);
+
   return (
-    <div className="space-y-3">
-      {data.map((repo) => {
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {displayData.map((repo) => {
         const barWidth = Math.max((repo.total_commits / maxCommits) * 100, 2);
         const netLines = repo.total_lines_added - repo.total_lines_removed;
 
@@ -84,6 +94,29 @@ export default function TopRepos({ data }: { data: Repo[] }) {
           </Link>
         );
       })}
+      </div>
+      
+      {totalPages > 1 && (
+        <div className="flex justify-end items-center gap-4 pr-2">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="text-xs text-violet-400/50 hover:text-violet-400 disabled:opacity-30 disabled:hover:text-violet-400/50 transition-colors font-mono"
+          >
+            ← prev
+          </button>
+          <span className="text-[10px] text-zinc-500 font-mono">
+            {page} / {totalPages}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="text-xs text-violet-400/50 hover:text-violet-400 disabled:opacity-30 disabled:hover:text-violet-400/50 transition-colors font-mono"
+          >
+            next →
+          </button>
+        </div>
+      )}
     </div>
   );
 }

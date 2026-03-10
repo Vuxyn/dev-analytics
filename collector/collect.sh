@@ -35,15 +35,15 @@ log() {
 }
 
 db_query() {
-    psql "$DATABASE_URL" -t -A -c "$1" 2>/dev/null | head -1 | xargs
+    psql "$DATABASE_URL" -t -A -c "$1" 2>&1 | head -1 | xargs
 }
 
 db_exec() {
-    psql "$DATABASE_URL" -t -A -c "$1" 2>/dev/null
+    psql "$DATABASE_URL" -t -A -c "$1"
 }
 
 db_exec_file() {
-    psql "$DATABASE_URL" -t -A -f "$1" 2>/dev/null
+    psql "$DATABASE_URL" -t -A -f "$1"
 }
 
 escape_sql() {
