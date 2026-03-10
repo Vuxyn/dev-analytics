@@ -6,7 +6,7 @@ from database import connect, disconnect
 from routers import heatmap, repos, summary, timeline
 
 @asynccontextmanager
-async def lisespan(app: FastAPI):
+async def lifespan(app: FastAPI):
     await connect()
     yield
     await disconnect()

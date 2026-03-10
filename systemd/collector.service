@@ -8,8 +8,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=vuxyn
-
-# Path ke collect.sh
+EnvironmentFile=/home/vuxyn/projects/dev-analytics/.env
 ExecStart=/home/vuxyn/projects/dev-analytics/collector/collect.sh
 
 # Logging ke systemd journal

@@ -8,7 +8,7 @@ _pool: asyncpg.Pool | None = None
 
 async def connect():
     global _pool
-    _pool = await async.create_pool(
+    _pool = await asyncpg.create_pool(
         dsn=DATABASE_URL,
         min_size=2,
         max_size=10,
@@ -27,5 +27,5 @@ def get_pool() -> asyncpg.Pool:
 
 @asynccontextmanager
 async def get_conn():
-    async with get_pool().acquire as conn:
+    async with get_pool().acquire() as conn:
         yield conn

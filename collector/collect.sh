@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # collect.sh
 # Script utama collector — scan semua repo, extract commit, tulis ke PostgreSQL
+# Versi 2: batch insert untuk performa lebih cepat
 
 set -uo pipefail
 
@@ -11,7 +12,6 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Load .env
 if [[ -f "$PROJECT_DIR/.env" ]]; then
     export $(cat "$PROJECT_DIR/.env" | grep -v '^#' | xargs)
 else
@@ -19,10 +19,8 @@ else
     exit 1
 fi
 
-# Load config (list repo)
 source "$SCRIPT_DIR/config.sh"
 
-# Validasi DATABASE_URL
 if [[ -z "${DATABASE_URL:-}" ]]; then
     echo "[ERROR] DATABASE_URL tidak ditemukan di .env"
     exit 1
@@ -36,29 +34,29 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Jalanin query SQL, return satu nilai bersih
 db_query() {
     psql "$DATABASE_URL" -t -A -c "$1" 2>/dev/null | head -1 | xargs
 }
 
-# Jalanin query tanpa return value (INSERT, UPDATE, DELETE)
 db_exec() {
     psql "$DATABASE_URL" -t -A -c "$1" 2>/dev/null
 }
 
-# Escape single quote untuk SQL
+db_exec_file() {
+    psql "$DATABASE_URL" -t -A -f "$1" 2>/dev/null
+}
+
 escape_sql() {
     echo "${1//\'/\'\'}"
 }
 
-# Convert timestamp ke format ISO yang git mengerti
 to_git_date() {
     local ts="$1"
     if [[ -z "$ts" || "$ts" == "1970-01-01 00:00:00" ]]; then
-        echo "1970-01-01T00:00:00"
+        echo "1970-01-01"
         return
     fi
-    date -d "$ts" '+%Y-%m-%dT%H:%M:%S' 2>/dev/null || echo "1970-01-01T00:00:00"
+    date -d "$ts" '+%Y-%m-%d' 2>/dev/null || echo "1970-01-01"
 }
 
 # ============================================
@@ -67,7 +65,6 @@ to_git_date() {
 
 for REPO_PATH in "${REPOS[@]}"; do
 
-    # Validasi folder repo ada
     if [[ ! -d "$REPO_PATH/.git" ]]; then
         log "[SKIP] Bukan git repo: $REPO_PATH"
         continue
@@ -76,18 +73,13 @@ for REPO_PATH in "${REPOS[@]}"; do
     REPO_NAME=$(basename "$REPO_PATH")
     log "Processing repo: $REPO_NAME ($REPO_PATH)"
 
-    # Fetch semua branch dari remote
     log "  Fetching all branches..."
     git -C "$REPO_PATH" fetch --all --quiet 2>/dev/null || true
 
-    # Ambil remote URL
     REMOTE_URL=$(git -C "$REPO_PATH" remote get-url origin 2>/dev/null || echo "")
     REMOTE_URL=$(escape_sql "$REMOTE_URL")
 
-    # ============================================
-    # Insert repo ke database kalau belum ada
-    # ============================================
-
+    # Insert repo kalau belum ada
     REPO_ID=$(db_query "SELECT id FROM repositories WHERE path = '$REPO_PATH' LIMIT 1;")
 
     if [[ -z "$REPO_ID" ]]; then
@@ -102,26 +94,19 @@ for REPO_PATH in "${REPOS[@]}"; do
         log "  Repo sudah ada, ID: $REPO_ID"
     fi
 
-    # Validasi REPO_ID adalah angka
     if [[ ! "$REPO_ID" =~ ^[0-9]+$ ]]; then
-        log "  [ERROR] REPO_ID tidak valid: '$REPO_ID', skip repo ini"
+        log "  [ERROR] REPO_ID tidak valid: '$REPO_ID', skip"
         continue
     fi
 
-    # Ambil last_synced untuk incremental sync
     LAST_SYNCED_RAW=$(db_query "
         SELECT COALESCE(last_synced::text, '1970-01-01 00:00:00')
-        FROM repositories
-        WHERE id = $REPO_ID;
+        FROM repositories WHERE id = $REPO_ID;
     ")
-
     LAST_SYNCED=$(to_git_date "$LAST_SYNCED_RAW")
     log "  Last synced: $LAST_SYNCED"
 
-    # ============================================
     # Ambil semua branch remote
-    # ============================================
-
     BRANCHES=$(git -C "$REPO_PATH" branch -r --format='%(refname:short)' 2>/dev/null | \
         sed 's|origin/||' | \
         grep -v 'HEAD' | \
@@ -136,8 +121,12 @@ for REPO_PATH in "${REPOS[@]}"; do
     TOTAL_COMMITS_ADDED=0
     SYNC_STATUS="success"
 
+    # Tempfile untuk batch SQL
+    BATCH_SQL=$(mktemp /tmp/dev-analytics-batch-XXXXXX.sql)
+    trap "rm -f $BATCH_SQL" EXIT
+
     # ============================================
-    # Loop setiap branch
+    # Loop setiap branch — kumpulkan semua values
     # ============================================
 
     while IFS= read -r BRANCH; do
@@ -154,7 +143,7 @@ for REPO_PATH in "${REPOS[@]}"; do
 
         [[ -z "$GIT_LOG" ]] && continue
 
-        log "    Ada data commit, mulai parsing..."
+        log "    Parsing commits..."
 
         CURRENT_SHA=""
         CURRENT_AUTHOR_NAME=""
@@ -164,15 +153,12 @@ for REPO_PATH in "${REPOS[@]}"; do
         LINES_ADDED=0
         LINES_REMOVED=0
         FILES_CHANGED=0
+        BRANCH_COMMIT_COUNT=0
 
-        do_insert_commit() {
+        # Tulis satu commit ke batch file
+        write_commit_to_batch() {
             [[ -z "$CURRENT_SHA" ]] && return
             [[ ! "$CURRENT_TS" =~ ^[0-9]+$ ]] && return
-
-            EXISTS=$(db_query "SELECT COUNT(*) FROM commits WHERE sha = '$CURRENT_SHA';")
-            if [[ "${EXISTS:-0}" -gt 0 ]]; then
-                return
-            fi
 
             COMMITTED_AT=$(date -d "@$CURRENT_TS" '+%Y-%m-%d %H:%M:%S' 2>/dev/null)
             [[ -z "$COMMITTED_AT" ]] && return
@@ -182,32 +168,13 @@ for REPO_PATH in "${REPOS[@]}"; do
             SAFE_EMAIL=$(escape_sql "$CURRENT_AUTHOR_EMAIL")
             SAFE_BRANCH=$(escape_sql "$BRANCH")
 
-            db_exec "
-                INSERT INTO commits (
-                    repo_id, sha, branch, author_name, author_email,
-                    message, lines_added, lines_removed, files_changed, committed_at
-                ) VALUES (
-                    $REPO_ID,
-                    '$CURRENT_SHA',
-                    '$SAFE_BRANCH',
-                    '$SAFE_AUTHOR',
-                    '$SAFE_EMAIL',
-                    '$SAFE_MSG',
-                    $LINES_ADDED,
-                    $LINES_REMOVED,
-                    $FILES_CHANGED,
-                    '$COMMITTED_AT'
-                ) ON CONFLICT (sha) DO NOTHING;
-            " > /dev/null 2>&1
-
-            TOTAL_COMMITS_ADDED=$((TOTAL_COMMITS_ADDED + 1))
-            log "    Inserted: ${CURRENT_SHA:0:7} — $CURRENT_MSG"
+            cat >> "$BATCH_SQL" << SQLEOF
+INSERT INTO commits (repo_id, sha, branch, author_name, author_email, message, lines_added, lines_removed, files_changed, committed_at)
+VALUES ($REPO_ID, '$CURRENT_SHA', '$SAFE_BRANCH', '$SAFE_AUTHOR', '$SAFE_EMAIL', '$SAFE_MSG', $LINES_ADDED, $LINES_REMOVED, $FILES_CHANGED, '$COMMITTED_AT')
+ON CONFLICT (sha) DO NOTHING;
+SQLEOF
+            BRANCH_COMMIT_COUNT=$((BRANCH_COMMIT_COUNT + 1))
         }
-
-        CURRENT_SHA=""
-        LINES_ADDED=0
-        LINES_REMOVED=0
-        FILES_CHANGED=0
 
         while IFS= read -r LINE; do
             [[ -z "$LINE" ]] && continue
@@ -215,7 +182,7 @@ for REPO_PATH in "${REPOS[@]}"; do
             PIPE_COUNT=$(echo "$LINE" | tr -cd '|' | wc -c)
 
             if [[ $PIPE_COUNT -ge 4 ]]; then
-                do_insert_commit
+                write_commit_to_batch
                 IFS='|' read -r CURRENT_SHA CURRENT_AUTHOR_NAME CURRENT_AUTHOR_EMAIL CURRENT_TS CURRENT_MSG <<< "$LINE"
                 LINES_ADDED=0
                 LINES_REMOVED=0
@@ -230,14 +197,28 @@ for REPO_PATH in "${REPOS[@]}"; do
         done <<< "$GIT_LOG"
 
         # Flush commit terakhir
-        do_insert_commit
+        write_commit_to_batch
+
+        log "    $BRANCH_COMMIT_COUNT commits dikumpulkan"
+        TOTAL_COMMITS_ADDED=$((TOTAL_COMMITS_ADDED + BRANCH_COMMIT_COUNT))
 
     done <<< "$BRANCHES"
 
     # ============================================
-    # Update daily_summary
+    # Kirim semua commit dalam satu batch ke database
     # ============================================
 
+    if [[ -s "$BATCH_SQL" ]]; then
+        log "  Inserting batch ke database..."
+        db_exec_file "$BATCH_SQL"
+        log "  Batch insert selesai. Total commits: $TOTAL_COMMITS_ADDED"
+    else
+        log "  Tidak ada commit baru."
+    fi
+
+    rm -f "$BATCH_SQL"
+
+    # Update daily_summary
     log "  Updating daily summary..."
     db_exec "
         INSERT INTO daily_summary (repo_id, date, commit_count, lines_added, lines_removed, files_changed, active_hours, branches)
