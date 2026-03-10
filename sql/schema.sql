@@ -49,3 +49,16 @@ CREATE TABLE IF NOT EXISTS sync_log (
     status        VARCHAR(50),
     error_message TEXT
 );
+
+CREATE TABLE IF NOT EXISTS language_stats (
+    id            SERIAL PRIMARY KEY,
+    repo_id       INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    date          DATE NOT NULL,
+    language      VARCHAR(50) NOT NULL,
+    lines_added   INTEGER DEFAULT 0,
+    lines_removed INTEGER DEFAULT 0,
+    UNIQUE(repo_id, date, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_language_stats_date ON language_stats(date);
+CREATE INDEX IF NOT EXISTS idx_language_stats_repo ON language_stats(repo_id);

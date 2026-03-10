@@ -61,6 +61,45 @@ to_git_date() {
     date -d "$ts" '+%Y-%m-%d' 2>/dev/null || echo "1970-01-01"
 }
 
+get_language() {
+    local filename="$1"
+    local ext="${filename##*.}"
+    # Jika tidak ada titik, atau diawali titik tanpa ekstensi lain (misal .gitignore)
+    if [[ "$filename" == "$ext" ]]; then
+        case "$(basename "$filename")" in
+            Dockerfile) echo "Dockerfile" ;;
+            Makefile) echo "Makefile" ;;
+            *) echo "Other" ;;
+        esac
+        return
+    fi
+
+    case "${ext,,}" in
+        ts|tsx) echo "TypeScript" ;;
+        js|jsx) echo "JavaScript" ;;
+        py) echo "Python" ;;
+        go) echo "Go" ;;
+        sh) echo "Shell" ;;
+        rb) echo "Ruby" ;;
+        php) echo "PHP" ;;
+        rs) echo "Rust" ;;
+        c) echo "C" ;;
+        cpp|cc|cxx) echo "C++" ;;
+        cs) echo "C#" ;;
+        java) echo "Java" ;;
+        kt|kts) echo "Kotlin" ;;
+        swift) echo "Swift" ;;
+        md|markdown) echo "Markdown" ;;
+        html|htm) echo "HTML" ;;
+        css) echo "CSS" ;;
+        scss|sass) echo "Sass" ;;
+        sql) echo "SQL" ;;
+        json) echo "JSON" ;;
+        yml|yaml) echo "YAML" ;;
+        *) echo "Other" ;;
+    esac
+}
+
 # ============================================
 # Proses setiap repo
 # ============================================
@@ -74,6 +113,11 @@ for REPO_PATH in "${REPOS[@]}"; do
 
     REPO_NAME=$(basename "$REPO_PATH")
     log "Processing repo: $REPO_NAME ($REPO_PATH)"
+
+    # Associative array untuk language stats: "DATE|LANG|type" -> value
+    # Kita reset per repo
+    unset REPO_LANG_STATS
+    declare -A REPO_LANG_STATS
 
     log "  Fetching all branches..."
     git -C "$REPO_PATH" fetch --all --quiet 2>/dev/null || true
@@ -196,9 +240,26 @@ SQLEOF
                 # read space-separated fields from numstat directly
                 IFS=$' \t' read -r ADDED REMOVED FILE_PATH <<< "$LINE"
                 
+                # Update total commit lines
                 if [[ "$ADDED" =~ ^[0-9]+$ ]]; then LINES_ADDED=$((LINES_ADDED + ADDED)); fi
                 if [[ "$REMOVED" =~ ^[0-9]+$ ]]; then LINES_REMOVED=$((LINES_REMOVED + REMOVED)); fi
                 FILES_CHANGED=$((FILES_CHANGED + 1))
+
+                # Update language stats
+                if [[ "$CURRENT_TS" =~ ^[0-9]+$ ]]; then
+                    CURR_DATE=$(date -d "@$CURRENT_TS" '+%Y-%m-%d' 2>/dev/null)
+                    if [[ -n "$CURR_DATE" ]]; then
+                        LANG_NAME=$(get_language "$FILE_PATH")
+                        if [[ "$ADDED" =~ ^[0-9]+$ ]]; then
+                            KEY="${CURR_DATE}|${LANG_NAME}|added"
+                            REPO_LANG_STATS["$KEY"]=$(( ${REPO_LANG_STATS["$KEY"]:-0} + ADDED ))
+                        fi
+                        if [[ "$REMOVED" =~ ^[0-9]+$ ]]; then
+                            KEY="${CURR_DATE}|${LANG_NAME}|removed"
+                            REPO_LANG_STATS["$KEY"]=$(( ${REPO_LANG_STATS["$KEY"]:-0} + REMOVED ))
+                        fi
+                    fi
+                fi
             fi
         done <<< "$GIT_LOG"
 
@@ -249,6 +310,35 @@ SQLEOF
             active_hours  = EXCLUDED.active_hours,
             branches      = EXCLUDED.branches;
     "
+
+    # Update language stats di DB
+    if [[ ${#REPO_LANG_STATS[@]} -gt 0 ]]; then
+        log "  Updating language stats..."
+        LANG_BATCH_SQL=$(mktemp /tmp/dev-analytics-lang-XXXXXX.sql)
+        
+        # Ekstrak semua unik date|lang dari keys
+        for KEY in "${!REPO_LANG_STATS[@]}"; do
+            if [[ "$KEY" == *"|added" ]]; then
+                BASE_KEY="${KEY%|added}"
+                IFS='|' read -r L_DATE L_NAME <<< "$BASE_KEY"
+                L_ADDED=${REPO_LANG_STATS["$BASE_KEY|added"]:-0}
+                L_REMOVED=${REPO_LANG_STATS["$BASE_KEY|removed"]:-0}
+
+                cat >> "$LANG_BATCH_SQL" << SQLEOF
+INSERT INTO language_stats (repo_id, date, language, lines_added, lines_removed)
+VALUES ($REPO_ID, '$L_DATE', '$L_NAME', $L_ADDED, $L_REMOVED)
+ON CONFLICT (repo_id, date, language) DO UPDATE SET
+    lines_added = EXCLUDED.lines_added,
+    lines_removed = EXCLUDED.lines_removed;
+SQLEOF
+            fi
+        done
+
+        if [[ -s "$LANG_BATCH_SQL" ]]; then
+            db_exec_file "$LANG_BATCH_SQL"
+        fi
+        rm -f "$LANG_BATCH_SQL"
+    fi
 
     db_exec "UPDATE repositories SET last_synced = NOW() WHERE id = $REPO_ID;"
 

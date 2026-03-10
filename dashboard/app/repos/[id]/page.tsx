@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import TimelineChart from "@/components/TimelineChart";
 import BranchBadges from "@/components/BranchBadges";
 import DateFilter from "@/components/DateFilter";
+import LanguageDistribution from "@/components/LanguageDistribution";
 
 export const revalidate = 0;
 
@@ -29,6 +30,19 @@ async function getTimeline(id: string, days: string | null): Promise<TimelineDat
     );
     if (res.status === 404) notFound();
     if (!res.ok) throw new Error("Failed to fetch timeline");
+    return res.json();
+}
+
+async function getLanguageStats(id: string, days: string | null) {
+    const query = new URLSearchParams();
+    if (days) query.set("days", days);
+    query.set("repo_id", id);
+
+    const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/languages?${query.toString()}`,
+        { cache: "no-store" }
+    );
+    if (!res.ok) return []; // Silently fail if language stats fail
     return res.json();
 }
 
@@ -77,7 +91,10 @@ export default async function RepoDetailPage({
     const resolvedParams = await searchParams;
     const days = typeof resolvedParams.days === "string" ? resolvedParams.days : null;
 
-    const data = await getTimeline(id, days);
+    const [data, languages] = await Promise.all([
+        getTimeline(id, days),
+        getLanguageStats(id, days)
+    ]);
     const { timeline, repo_name } = data;
 
     const totalCommits = timeline.reduce((s, d) => s + d.commit_count, 0);
@@ -161,6 +178,16 @@ export default async function RepoDetailPage({
                             </div>
                         ))}
                     </div>
+                </div>
+            )}
+            
+            {/* Languages */}
+            {languages.length > 0 && (
+                <div className="card p-5 space-y-3">
+                    <h2 className="text-sm font-medium text-[#e2e2e8]">
+                        Bahasa Pemrograman
+                    </h2>
+                    <LanguageDistribution data={languages} />
                 </div>
             )}
 

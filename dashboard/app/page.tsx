@@ -3,6 +3,7 @@ import SummaryStats from "@/components/SummaryStats";
 import ActivityHeatmap from "@/components/ActivityHeatmap";
 import TopRepos from "@/components/TopRepos";
 import DateFilter from "@/components/DateFilter";
+import LanguageDistribution from "@/components/LanguageDistribution";
 
 export const revalidate = 0; // dynamic because of user searchParams
 
@@ -42,6 +43,18 @@ async function getRepos(days: string | null) {
   return res.json();
 }
 
+async function getLanguageStats(days: string | null) {
+  const query = days ? `?days=${days}` : "";
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/languages${query}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "Unknown error");
+    throw new Error(`Failed to fetch languages: ${res.status} ${res.statusText} - ${errorText}`);
+  }
+  return res.json();
+}
+
 export default async function HomePage({
   searchParams,
 }: {
@@ -50,10 +63,11 @@ export default async function HomePage({
   const resolvedParams = await searchParams;
   const days = typeof resolvedParams.days === "string" ? resolvedParams.days : null;
 
-  const [summary, heatmap, repos] = await Promise.all([
+  const [summary, heatmap, repos, languages] = await Promise.all([
     getSummary(days),
     getHeatmap(days),
     getRepos(days),
+    getLanguageStats(days),
   ]);
 
   return (
@@ -87,6 +101,16 @@ export default async function HomePage({
         </div>
         <Suspense fallback={<div className="h-32 bg-white/5 rounded animate-pulse" />}>
           <ActivityHeatmap data={heatmap} />
+        </Suspense>
+      </div>
+
+      {/* Language distribution */}
+      <div className="card p-6 space-y-4">
+        <h2 className="text-sm font-medium text-white">
+          Bahasa Pemrograman
+        </h2>
+        <Suspense fallback={<div className="h-12 bg-white/5 rounded animate-pulse" />}>
+          <LanguageDistribution data={languages} />
         </Suspense>
       </div>
 
