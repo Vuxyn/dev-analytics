@@ -20,7 +20,7 @@ export default function Navbar() {
             <div className="w-6 h-6 rounded-md bg-violet-500/20 border border-violet-500/30 flex items-center justify-center group-hover:bg-violet-500/30 transition-colors">
               <div className="w-2 h-2 rounded-sm bg-violet-400" />
             </div>
-            <span className="font-mono text-sm font-medium text-[#e2e2e8]">
+            <span className="font-mono text-sm font-medium text-white">
               dev<span className="text-violet-400">.</span>analytics
             </span>
           </Link>
@@ -39,7 +39,7 @@ export default function Navbar() {
                   className={`px-3 py-1.5 rounded-md text-sm transition-all ${
                     isActive
                       ? "bg-violet-500/15 text-violet-300 border border-violet-500/20"
-                      : "text-[#9999b0] hover:text-[#e2e2e8] hover:bg-white/5"
+                      : "text-zinc-400 hover:text-white hover:bg-white/5"
                   }`}
                 >
                   {item.label}
@@ -48,10 +48,9 @@ export default function Navbar() {
             })}
           </nav>
 
-          {/* Live indicator */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse-soft" />
-            <span className="text-xs text-[#55556a] font-mono">live</span>
+            <span className="hidden sm:inline-block text-xs text-zinc-500 font-mono">live</span>
           </div>
         </div>
       </div>

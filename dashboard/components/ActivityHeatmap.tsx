@@ -32,7 +32,7 @@ const DAYS = ["", "Mon", "", "Wed", "", "Fri", ""];
 export default function ActivityHeatmap({ data }: { data: HeatmapEntry[] }) {
   if (!data || data.length === 0) {
     return (
-      <div className="h-32 flex items-center justify-center text-[#55556a] text-sm font-mono">
+      <div className="h-32 flex items-center justify-center text-zinc-500 text-sm font-mono">
         belum ada data
       </div>
     );
@@ -87,13 +87,14 @@ export default function ActivityHeatmap({ data }: { data: HeatmapEntry[] }) {
   });
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 overflow-x-auto pb-4 scrollbar-thin">
+      <div className="min-w-max">
       {/* Month labels */}
       <div className="flex gap-[3px] ml-8">
         {weeks.map((_, i) => {
           const label = monthLabels.find((m) => m.col === i);
           return (
-            <div key={i} className="w-[13px] text-[9px] text-[#55556a] font-mono">
+            <div key={i} className="w-[13px] text-[9px] text-zinc-500 font-mono">
               {label?.label ?? ""}
             </div>
           );
@@ -105,7 +106,7 @@ export default function ActivityHeatmap({ data }: { data: HeatmapEntry[] }) {
         {/* Day labels */}
         <div className="flex flex-col gap-[3px] mr-1">
           {DAYS.map((day, i) => (
-            <div key={i} className="h-[13px] text-[9px] text-[#55556a] font-mono leading-[13px]">
+            <div key={i} className="h-[13px] text-[9px] text-zinc-500 font-mono leading-[13px]">
               {day}
             </div>
           ))}
@@ -139,15 +140,16 @@ export default function ActivityHeatmap({ data }: { data: HeatmapEntry[] }) {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-2 justify-end">
-        <span className="text-[10px] text-[#55556a] font-mono">less</span>
+      <div className="flex items-center gap-2 justify-end mt-2">
+        <span className="text-[10px] text-zinc-500 font-mono">less</span>
         {[0, 1, 2, 3, 4, 5].map((i) => (
           <div
             key={i}
             className={`w-[11px] h-[11px] rounded-[2px] ${intensityColors[i]}`}
           />
         ))}
-        <span className="text-[10px] text-[#55556a] font-mono">more</span>
+        <span className="text-[10px] text-zinc-500 font-mono">more</span>
+      </div>
       </div>
     </div>
   );

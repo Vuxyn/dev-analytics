@@ -34,17 +34,17 @@ function StatCard({
 
   return (
     <div className="card p-5 space-y-2 hover:border-white/10 transition-all">
-      <p className="text-xs text-[#55556a] font-mono uppercase tracking-widest">
+      <p className="text-xs text-zinc-500 font-mono uppercase tracking-widest">
         {label}
       </p>
       <p
         className={`text-2xl font-semibold font-mono tracking-tight ${
-          accent ? accentMap[accent] : "text-[#e2e2e8]"
+          accent ? accentMap[accent] : "text-white"
         }`}
       >
         {value}
       </p>
-      {sub && <p className="text-xs text-[#55556a]">{sub}</p>}
+      {sub && <p className="text-xs text-zinc-500">{sub}</p>}
     </div>
   );
 }
@@ -56,7 +56,7 @@ export default function SummaryStats({ data }: { data: Summary }) {
       : "—";
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <StatCard
         label="Total Commits"
         value={formatNumber(data.total_commits)}

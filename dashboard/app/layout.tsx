@@ -27,7 +27,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${outfit.variable} ${jetbrains.variable}`}>
-      <body className="bg-[#0a0a0f] text-[#e2e2e8] font-sans antialiased min-h-screen">
+      <body className="bg-black text-white font-sans antialiased min-h-screen">
         <div className="fixed inset-0 pointer-events-none z-0">
           <div className="absolute top-0 left-1/4 w-96 h-96 bg-violet-900/10 rounded-full blur-3xl" />
           <div className="absolute bottom-1/3 right-1/4 w-64 h-64 bg-blue-900/8 rounded-full blur-3xl" />
@@ -38,9 +38,9 @@ export default function RootLayout({
             {children}
           </main>
           <footer className="border-t border-white/5 py-6 text-center">
-            <p className="text-xs text-[#666680] font-mono">
+            <p className="text-xs text-zinc-500 font-mono">
               dev-analytics · all branches · all commits ·{" "}
-              <span className="text-violet-400/70">your real process</span>
+              <span className="text-violet-400">your real process</span>
             </p>
           </footer>
         </div>

@@ -40,12 +40,12 @@ export default async function HomePage() {
     <div className="space-y-8 animate-fade-up">
       {/* Header */}
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold text-[#e2e2e8] tracking-tight">
+        <h1 className="text-2xl font-semibold text-white tracking-tight">
           Overview
         </h1>
-        <p className="text-sm text-[#9999b0]">
+        <p className="text-sm text-zinc-400">
           Aktivitas coding dari semua branch —{" "}
-          <span className="text-violet-400/80">bukan cuma master</span>
+          <span className="text-violet-400">bukan cuma master</span>
         </p>
       </div>
 
@@ -57,7 +57,7 @@ export default async function HomePage() {
       {/* Heatmap */}
       <div className="card p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-[#e2e2e8]">
+          <h2 className="text-sm font-medium text-white">
             Aktivitas Coding
           </h2>
           <span className="stat-badge">semua branch</span>
@@ -70,7 +70,7 @@ export default async function HomePage() {
       {/* Top repos */}
       <div className="card p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-[#e2e2e8]">
+          <h2 className="text-sm font-medium text-white">
             Repository Aktif
           </h2>
           <a

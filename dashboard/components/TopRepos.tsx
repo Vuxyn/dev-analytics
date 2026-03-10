@@ -24,7 +24,7 @@ function formatDate(dateStr: string | null): string {
 export default function TopRepos({ data }: { data: Repo[] }) {
   if (!data || data.length === 0) {
     return (
-      <div className="text-sm text-[#55556a] font-mono">belum ada data</div>
+      <div className="text-sm text-zinc-500 font-mono">belum ada data</div>
     );
   }
 
@@ -43,15 +43,15 @@ export default function TopRepos({ data }: { data: Repo[] }) {
             className="block group"
           >
             <div className="card p-4 space-y-3 group-hover:border-violet-500/20 transition-all">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-violet-400/60 group-hover:bg-violet-400 transition-colors" />
-                  <span className="text-sm font-medium text-[#e2e2e8] font-mono">
+                  <span className="text-sm font-medium text-white font-mono break-all">
                     {repo.name}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-[#55556a] font-mono">
+                  <span className="text-xs text-zinc-500 font-mono">
                     synced {formatDate(repo.last_synced)}
                   </span>
                   <span className="stat-badge">
@@ -69,14 +69,14 @@ export default function TopRepos({ data }: { data: Repo[] }) {
               </div>
 
               {/* Stats */}
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4">
                 <span className="text-xs text-[#3dd68c] font-mono">
                   +{formatNumber(repo.total_lines_added)}
                 </span>
                 <span className="text-xs text-[#f87171] font-mono">
                   -{formatNumber(repo.total_lines_removed)}
                 </span>
-                <span className={`text-xs font-mono ${netLines >= 0 ? "text-[#55556a]" : "text-[#f87171]"}`}>
+                <span className={`text-xs font-mono ${netLines >= 0 ? "text-zinc-500" : "text-[#f87171]"}`}>
                   net {netLines >= 0 ? "+" : ""}{formatNumber(netLines)}
                 </span>
               </div>
