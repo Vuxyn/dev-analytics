@@ -40,7 +40,7 @@ export default function RootLayout({
           <footer className="border-t border-white/5 py-6 text-center">
             <p className="text-xs text-zinc-500 font-mono">
               dev-analytics · all branches · all commits ·{" "}
-              <span className="text-violet-400">your real process</span>
+              <span className="text-violet-400">real process</span>
             </p>
           </footer>
         </div>

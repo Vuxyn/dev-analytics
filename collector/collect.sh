@@ -13,7 +13,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 if [[ -f "$PROJECT_DIR/.env" ]]; then
-    export $(cat "$PROJECT_DIR/.env" | grep -v '^#' | xargs)
+    set -a
+    source "$PROJECT_DIR/.env"
+    set +a
 else
     echo "[ERROR] .env tidak ditemukan di $PROJECT_DIR"
     exit 1
@@ -138,6 +140,7 @@ for REPO_PATH in "${REPOS[@]}"; do
             "origin/$BRANCH" \
             --format="%H|%aN|%aE|%at|%s" \
             --numstat \
+            --author="Vuxyn\|f1d02410052@student.unram.ac.id\|mahesamp19@gmail.com" \
             --after="$LAST_SYNCED" \
             2>/dev/null || echo "")
 
@@ -179,7 +182,9 @@ SQLEOF
         while IFS= read -r LINE; do
             [[ -z "$LINE" ]] && continue
 
-            PIPE_COUNT=$(echo "$LINE" | tr -cd '|' | wc -c)
+            # Count pipes only using bash substitution to avoid multiple fork/exec
+            ONLY_PIPES="${LINE//[^|]/}"
+            PIPE_COUNT="${#ONLY_PIPES}"
 
             if [[ $PIPE_COUNT -ge 4 ]]; then
                 write_commit_to_batch
@@ -188,8 +193,9 @@ SQLEOF
                 LINES_REMOVED=0
                 FILES_CHANGED=0
             else
-                ADDED=$(echo "$LINE" | awk '{print $1}')
-                REMOVED=$(echo "$LINE" | awk '{print $2}')
+                # read space-separated fields from numstat directly
+                IFS=$' \t' read -r ADDED REMOVED FILE_PATH <<< "$LINE"
+                
                 if [[ "$ADDED" =~ ^[0-9]+$ ]]; then LINES_ADDED=$((LINES_ADDED + ADDED)); fi
                 if [[ "$REMOVED" =~ ^[0-9]+$ ]]; then LINES_REMOVED=$((LINES_REMOVED + REMOVED)); fi
                 FILES_CHANGED=$((FILES_CHANGED + 1))
@@ -220,6 +226,7 @@ SQLEOF
 
     # Update daily_summary
     log "  Updating daily summary..."
+    # Hilangkan > /dev/null 2>&1 agar error dari postgresql terlihat jika gagal masuk ke daily_summary
     db_exec "
         INSERT INTO daily_summary (repo_id, date, commit_count, lines_added, lines_removed, files_changed, active_hours, branches)
         SELECT
@@ -241,14 +248,14 @@ SQLEOF
             files_changed = EXCLUDED.files_changed,
             active_hours  = EXCLUDED.active_hours,
             branches      = EXCLUDED.branches;
-    " > /dev/null 2>&1
+    "
 
-    db_exec "UPDATE repositories SET last_synced = NOW() WHERE id = $REPO_ID;" > /dev/null 2>&1
+    db_exec "UPDATE repositories SET last_synced = NOW() WHERE id = $REPO_ID;"
 
     db_exec "
         INSERT INTO sync_log (repo_id, commits_added, status)
         VALUES ($REPO_ID, $TOTAL_COMMITS_ADDED, '$SYNC_STATUS');
-    " > /dev/null 2>&1
+    "
 
     log "  Done. Commits added: $TOTAL_COMMITS_ADDED"
 
