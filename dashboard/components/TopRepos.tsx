@@ -1,0 +1,89 @@
+import Link from "next/link";
+
+type Repo = {
+  id: number;
+  name: string;
+  remote_url: string;
+  last_synced: string | null;
+  total_commits: number;
+  total_lines_added: number;
+  total_lines_removed: number;
+};
+
+function formatNumber(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return n.toString();
+}
+
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+}
+
+export default function TopRepos({ data }: { data: Repo[] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="text-sm text-[#55556a] font-mono">belum ada data</div>
+    );
+  }
+
+  const maxCommits = Math.max(...data.map((r) => r.total_commits), 1);
+
+  return (
+    <div className="space-y-3">
+      {data.map((repo) => {
+        const barWidth = Math.max((repo.total_commits / maxCommits) * 100, 2);
+        const netLines = repo.total_lines_added - repo.total_lines_removed;
+
+        return (
+          <Link
+            key={repo.id}
+            href={`/repos/${repo.id}`}
+            className="block group"
+          >
+            <div className="card p-4 space-y-3 group-hover:border-violet-500/20 transition-all">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-violet-400/60 group-hover:bg-violet-400 transition-colors" />
+                  <span className="text-sm font-medium text-[#e2e2e8] font-mono">
+                    {repo.name}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-[#55556a] font-mono">
+                    synced {formatDate(repo.last_synced)}
+                  </span>
+                  <span className="stat-badge">
+                    {repo.total_commits} commits
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-violet-500/60 rounded-full transition-all group-hover:bg-violet-400/80"
+                  style={{ width: `${barWidth}%` }}
+                />
+              </div>
+
+              {/* Stats */}
+              <div className="flex items-center gap-4">
+                <span className="text-xs text-[#3dd68c] font-mono">
+                  +{formatNumber(repo.total_lines_added)}
+                </span>
+                <span className="text-xs text-[#f87171] font-mono">
+                  -{formatNumber(repo.total_lines_removed)}
+                </span>
+                <span className={`text-xs font-mono ${netLines >= 0 ? "text-[#55556a]" : "text-[#f87171]"}`}>
+                  net {netLines >= 0 ? "+" : ""}{formatNumber(netLines)}
+                </span>
+              </div>
+            </div>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}

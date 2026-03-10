@@ -1,0 +1,60 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+const navItems = [
+  { href: "/", label: "Overview" },
+  { href: "/repos", label: "Repositories" },
+];
+
+export default function Navbar() {
+  const pathname = usePathname();
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-white/5 backdrop-blur-md bg-[#0a0a0f]/80">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-14">
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-6 h-6 rounded-md bg-violet-500/20 border border-violet-500/30 flex items-center justify-center group-hover:bg-violet-500/30 transition-colors">
+              <div className="w-2 h-2 rounded-sm bg-violet-400" />
+            </div>
+            <span className="font-mono text-sm font-medium text-[#e2e2e8]">
+              dev<span className="text-violet-400">.</span>analytics
+            </span>
+          </Link>
+
+          {/* Nav */}
+          <nav className="flex items-center gap-1">
+            {navItems.map((item) => {
+              const isActive =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-3 py-1.5 rounded-md text-sm transition-all ${
+                    isActive
+                      ? "bg-violet-500/15 text-violet-300 border border-violet-500/20"
+                      : "text-[#9999b0] hover:text-[#e2e2e8] hover:bg-white/5"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Live indicator */}
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse-soft" />
+            <span className="text-xs text-[#55556a] font-mono">live</span>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
