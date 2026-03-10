@@ -10,7 +10,7 @@ async def get_summary(days: int = Query(None, description="Filter by last N days
         date_filter = ""
         params = []
         if days is not None:
-            date_filter = "WHERE date >= CURRENT_DATE - ($1 || ' days')::interval"
+            date_filter = "WHERE date >= CURRENT_DATE - ($1::text || ' days')::interval"
             params.append(days)
 
         stats_query = f"""
@@ -32,7 +32,7 @@ async def get_summary(days: int = Query(None, description="Filter by last N days
                 r.name,
                 COALESCE(SUM(ds.commit_count), 0) AS total_commits
             FROM repositories r
-            LEFT JOIN daily_summary ds ON ds.repo_id = r.id AND ({'ds.date >= CURRENT_DATE - ($1 || \' days\')::interval' if days is not None else 'TRUE'})
+            LEFT JOIN daily_summary ds ON ds.repo_id = r.id AND ({'ds.date >= CURRENT_DATE - ($1::text || \' days\')::interval' if days is not None else 'TRUE'})
             GROUP BY r.id, r.name
             ORDER BY total_commits DESC
             LIMIT 3

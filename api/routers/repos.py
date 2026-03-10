@@ -8,7 +8,7 @@ async def get_repos(days: int = Query(None, description="Filter by last N days")
     async with get_conn() as conn:
         params = []
         if days is not None:
-            date_filter = "AND ds.date >= CURRENT_DATE - ($1 || ' days')::interval"
+            date_filter = "AND ds.date >= CURRENT_DATE - ($1::text || ' days')::interval"
             params.append(days)
         else:
             date_filter = ""

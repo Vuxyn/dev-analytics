@@ -16,7 +16,7 @@ async def get_timeline(repo_id: int, days: int = Query(None, description="Filter
 
         params = [repo_id]
         if days is not None:
-            date_filter = "AND date >= CURRENT_DATE - ($2 || ' days')::interval"
+            date_filter = "AND date >= CURRENT_DATE - ($2::text || ' days')::interval"
             params.append(days)
         else:
             date_filter = ""

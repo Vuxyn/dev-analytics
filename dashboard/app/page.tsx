@@ -11,7 +11,10 @@ async function getSummary(days: string | null) {
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/summary${query}`, {
     cache: "no-store",
   });
-  if (!res.ok) throw new Error("Failed to fetch summary");
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "Unknown error");
+    throw new Error(`Failed to fetch summary: ${res.status} ${res.statusText} - ${errorText}`);
+  }
   return res.json();
 }
 
@@ -20,7 +23,10 @@ async function getHeatmap(days: string | null) {
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/heatmap${query}`, {
     cache: "no-store",
   });
-  if (!res.ok) throw new Error("Failed to fetch heatmap");
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "Unknown error");
+    throw new Error(`Failed to fetch heatmap: ${res.status} ${res.statusText} - ${errorText}`);
+  }
   return res.json();
 }
 
@@ -29,7 +35,10 @@ async function getRepos(days: string | null) {
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/repos${query}`, {
     cache: "no-store",
   });
-  if (!res.ok) throw new Error("Failed to fetch repos");
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "Unknown error");
+    throw new Error(`Failed to fetch repos: ${res.status} ${res.statusText} - ${errorText}`);
+  }
   return res.json();
 }
 

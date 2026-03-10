@@ -9,7 +9,7 @@ async def get_heatmap(days: int = Query(None, description="Filter by last N days
         date_filter = ""
         params = []
         if days is not None:
-            date_filter = "WHERE date >= CURRENT_DATE - ($1 || ' days')::interval"
+            date_filter = "WHERE date >= CURRENT_DATE - ($1::text || ' days')::interval"
             params.append(days)
 
         query = f"""
