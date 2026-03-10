@@ -2,51 +2,65 @@ import { Suspense } from "react";
 import SummaryStats from "@/components/SummaryStats";
 import ActivityHeatmap from "@/components/ActivityHeatmap";
 import TopRepos from "@/components/TopRepos";
+import DateFilter from "@/components/DateFilter";
 
-export const revalidate = 300; // revalidate setiap 5 menit
+export const revalidate = 0; // dynamic because of user searchParams
 
-async function getSummary() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/summary`, {
-    next: { revalidate: 300 },
+async function getSummary(days: string | null) {
+  const query = days ? `?days=${days}` : "";
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/summary${query}`, {
+    cache: "no-store",
   });
   if (!res.ok) throw new Error("Failed to fetch summary");
   return res.json();
 }
 
-async function getHeatmap() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/heatmap`, {
-    next: { revalidate: 300 },
+async function getHeatmap(days: string | null) {
+  const query = days ? `?days=${days}` : "";
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/heatmap${query}`, {
+    cache: "no-store",
   });
   if (!res.ok) throw new Error("Failed to fetch heatmap");
   return res.json();
 }
 
-async function getRepos() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/repos`, {
-    next: { revalidate: 300 },
+async function getRepos(days: string | null) {
+  const query = days ? `?days=${days}` : "";
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/repos${query}`, {
+    cache: "no-store",
   });
   if (!res.ok) throw new Error("Failed to fetch repos");
   return res.json();
 }
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const resolvedParams = await searchParams;
+  const days = typeof resolvedParams.days === "string" ? resolvedParams.days : null;
+
   const [summary, heatmap, repos] = await Promise.all([
-    getSummary(),
-    getHeatmap(),
-    getRepos(),
+    getSummary(days),
+    getHeatmap(days),
+    getRepos(days),
   ]);
 
   return (
     <div className="space-y-8 animate-fade-up">
       {/* Header */}
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold text-white tracking-tight">
-          Overview
-        </h1>
-        <p className="text-sm text-zinc-400">
-          Aktivitas coding dari semua branch, {" "}
-          <span className="text-violet-400">bukan cuma master</span>
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold text-white tracking-tight">
+            Overview
+          </h1>
+          <p className="text-sm text-zinc-400">
+            Aktivitas coding dari semua branch, {" "}
+            <span className="text-violet-400">bukan cuma master</span>
+          </p>
+        </div>
+        <DateFilter />
       </div>
 
       {/* Summary stats */}

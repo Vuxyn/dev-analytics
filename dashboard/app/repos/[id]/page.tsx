@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import TimelineChart from "@/components/TimelineChart";
 import BranchBadges from "@/components/BranchBadges";
+import DateFilter from "@/components/DateFilter";
 
-export const revalidate = 300;
+export const revalidate = 0;
 
 type TimelineEntry = {
     date: string;
@@ -20,10 +21,11 @@ type TimelineData = {
     timeline: TimelineEntry[];
 };
 
-async function getTimeline(id: string): Promise<TimelineData> {
+async function getTimeline(id: string, days: string | null): Promise<TimelineData> {
+    const query = days ? `?days=${days}` : "";
     const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/timeline/${id}`,
-        { next: { revalidate: 300 } }
+        `${process.env.NEXT_PUBLIC_API_URL}/timeline/${id}${query}`,
+        { cache: "no-store" }
     );
     if (res.status === 404) notFound();
     if (!res.ok) throw new Error("Failed to fetch timeline");
@@ -66,11 +68,16 @@ function detectMilestones(timeline: TimelineEntry[]) {
 
 export default async function RepoDetailPage({
     params,
+    searchParams,
 }: {
     params: Promise<{ id: string }>;
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
     const { id } = await params;
-    const data = await getTimeline(id);
+    const resolvedParams = await searchParams;
+    const days = typeof resolvedParams.days === "string" ? resolvedParams.days : null;
+
+    const data = await getTimeline(id, days);
     const { timeline, repo_name } = data;
 
     const totalCommits = timeline.reduce((s, d) => s + d.commit_count, 0);
@@ -102,6 +109,7 @@ export default async function RepoDetailPage({
                         {firstDate} → {lastDate} · {activeDays} hari aktif
                     </p>
                 </div>
+                <DateFilter />
             </div>
 
             {/* Stats */}

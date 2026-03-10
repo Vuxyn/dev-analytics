@@ -1,13 +1,19 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from database import get_conn
 
 router = APIRouter(prefix="/summary", tags=["summary"])
 
 
 @router.get("")
-async def get_summary():
+async def get_summary(days: int = Query(None, description="Filter by last N days")):
     async with get_conn() as conn:
-        stats = await conn.fetchrow("""
+        date_filter = ""
+        params = []
+        if days is not None:
+            date_filter = "WHERE date >= CURRENT_DATE - ($1 || ' days')::interval"
+            params.append(days)
+
+        stats_query = f"""
             SELECT
                 COUNT(DISTINCT repo_id)  AS total_repos,
                 COALESCE(SUM(commit_count), 0)  AS total_commits,
@@ -17,18 +23,21 @@ async def get_summary():
                 MIN(date) AS first_commit_date,
                 MAX(date) AS last_commit_date
             FROM daily_summary
-        """)
+            {date_filter}
+        """
+        stats = await conn.fetchrow(stats_query, *params)
 
-        most_active = await conn.fetch("""
+        most_active_query = f"""
             SELECT
                 r.name,
                 COALESCE(SUM(ds.commit_count), 0) AS total_commits
             FROM repositories r
-            LEFT JOIN daily_summary ds ON ds.repo_id = r.id
+            LEFT JOIN daily_summary ds ON ds.repo_id = r.id AND ({'ds.date >= CURRENT_DATE - ($1 || \' days\')::interval' if days is not None else 'TRUE'})
             GROUP BY r.id, r.name
             ORDER BY total_commits DESC
             LIMIT 3
-        """)
+        """
+        most_active = await conn.fetch(most_active_query, *params)
 
     return {
         "total_repos": stats["total_repos"],

@@ -1,12 +1,19 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from database import get_conn
 
 router = APIRouter(prefix="/repos", tags=["repos"])
 
 @router.get("")
-async def get_repos():
+async def get_repos(days: int = Query(None, description="Filter by last N days")):
     async with get_conn() as conn:
-        rows = await conn.fetch("""
+        params = []
+        if days is not None:
+            date_filter = "AND ds.date >= CURRENT_DATE - ($1 || ' days')::interval"
+            params.append(days)
+        else:
+            date_filter = ""
+
+        query = f"""
             SELECT
                 r.id,
                 r.name,
@@ -16,10 +23,11 @@ async def get_repos():
                 COALESCE(SUM(ds.lines_added), 0)   AS total_lines_added,
                 COALESCE(SUM(ds.lines_removed), 0) AS total_lines_removed
             FROM repositories r
-            LEFT JOIN daily_summary ds ON ds.repo_id = r.id
+            LEFT JOIN daily_summary ds ON ds.repo_id = r.id {date_filter}
             GROUP BY r.id
             ORDER BY total_commits DESC
-        """)
+        """
+        rows = await conn.fetch(query, *params)
         return [
             {
                 "id": row["id"],
