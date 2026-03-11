@@ -3,8 +3,6 @@
 # Dev-Analytics Installer Script
 
 set -e
-
-echo "====================================="
 echo "  Dev-Analytics Telemetry Installer  "
 echo "====================================="
 echo ""
@@ -72,15 +70,22 @@ chmod +x "$COLLECT_SCRIPT_PATH"
 echo ""
 echo "====================================="
 echo "We need to know which directories contain your Git repositories."
-echo "For example: /home/user/projects"
-read -p "Masukkan path direktori untuk ditrack: " TARGET_DIR
-
-if [ ! -d "$TARGET_DIR" ]; then
-    echo "Warning: Directory $TARGET_DIR does not exist yet."
-fi
+echo "For example: $HOME/projects"
+while true; do
+    read -p "Masukkan path direktori untuk ditrack: " TARGET_DIR
+    TARGET_DIR="${TARGET_DIR/#\~/$HOME}"  # expand ~ to home dir
+    if [ -z "$TARGET_DIR" ]; then
+        echo "Error: Path tidak boleh kosong."
+    elif [ ! -d "$TARGET_DIR" ]; then
+        echo "Warning: Direktori '$TARGET_DIR' tidak ditemukan. Pastikan path-nya benar."
+        read -p "Tetap gunakan path ini? (y/N): " CONFIRM
+        [[ "$CONFIRM" =~ ^[Yy]$ ]] && break
+    else
+        break
+    fi
+done
 
 # Save the target directory to config
-# Let's handle multiple directories in the future, for now just replace
 sed -i '/TARGET_DIR/d' "$CONFIG_FILE" || true
 echo "TARGET_DIR=\"$TARGET_DIR\"" >> "$CONFIG_FILE"
 
