@@ -25,7 +25,7 @@ def trigger_omni_notifier(text):
         "X-GitHub-Api-Version": "2022-11-28"
     }
     payload = {
-        "event_type": "send_telegram",
+        "event_type": "notify",
         "client_payload": {
             "message": text
         }
