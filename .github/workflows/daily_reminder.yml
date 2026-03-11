@@ -1,0 +1,38 @@
+name: Daily Telegram Reminder
+
+on:
+  schedule:
+    # Pengingat Pagi (08:00 WIB / 01:00 UTC)
+    - cron: '0 1 * * *'
+    # Peringatan Malam (20:00 WIB / 13:00 UTC)
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+    # Allow manual trigger for testing
+
+jobs:
+  send-reminder:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r api/requirements.txt
+          pip install requests  # Ensure requests is installed
+
+      - name: Run Reminder Script
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GITHUB_PAT: ${{ secrets.PAT_OMNI_NOTIFIER }}
+          OMNI_NOTIFIER_REPO: "vuxyn/omni-notifier"
+          SCHEDULE_TIME: ${{ github.event.schedule }}
+        run: |
+          python api/send_reminder.py
