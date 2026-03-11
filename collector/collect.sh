@@ -31,6 +31,9 @@ if [[ -z "${DEV_USERNAME:-}" || -z "${DEV_PIN:-}" || -z "${API_URL:-}" || -z "${
     exit 1
 fi
 
+# Sync all git history by default (safe - backend ignores duplicates via ON CONFLICT DO NOTHING)
+SYNC_DAYS="${SYNC_DAYS:-all}"
+
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
@@ -86,12 +89,20 @@ for REPO_PATH in "${REPO_PATHS[@]}"; do
 
         # Note: --after filter is simplified here. In production, we'd persist the LAST_SYNCED time per repo locally.
         # For this prototype we will sync all commits from the last 30 days to save bandwidth.
-        GIT_LOG=$(git -C "$REPO_PATH" log \
-            "$BRANCH" \
-            --format="%H|%aN|%aE|%at|%s" \
-            --numstat \
-            --since="30 days ago" \
-            2>/dev/null || echo "")
+        if [[ "$SYNC_DAYS" == "all" ]]; then
+            GIT_LOG=$(git -C "$REPO_PATH" log \
+                "$BRANCH" \
+                --format="%H|%aN|%aE|%at|%s" \
+                --numstat \
+                2>/dev/null || echo "")
+        else
+            GIT_LOG=$(git -C "$REPO_PATH" log \
+                "$BRANCH" \
+                --format="%H|%aN|%aE|%at|%s" \
+                --numstat \
+                --since="${SYNC_DAYS} days ago" \
+                2>/dev/null || echo "")
+        fi
 
         [[ -z "$GIT_LOG" ]] && continue
 
@@ -172,7 +183,7 @@ for REPO_PATH in "${REPO_PATHS[@]}"; do
 
 done
 
-log "Sending $TOTAL_COMMITS_ALL commits to Vercel/API at $API_URL..."
+log "Sending $TOTAL_COMMITS_ALL commits to API at $API_URL..."
 
 # ============================================
 # Send the HTTP POST JSON

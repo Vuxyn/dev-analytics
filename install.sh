@@ -17,7 +17,7 @@ command -v git >/dev/null 2>&1 || { echo >&2 "Error: 'git' is required but it's 
 # 2. Setup Configuration Details
 CONFIG_DIR="$HOME/.dev-analytics"
 CONFIG_FILE="$CONFIG_DIR/config.env"
-API_URL="http://localhost:8000/ingest/commits" # Nanti ganti dengan URL cloud Vercel sebenarnya saat production
+API_URL="https://dev-analytics-nq8j.onrender.com/ingest/commits"
 
 mkdir -p "$CONFIG_DIR"
 
@@ -46,7 +46,7 @@ else
     chmod 600 "$CONFIG_FILE"
     
     echo ""
-    echo "✅ Setup successful!"
+    echo "Setup successful!"
     echo "Auto-PIN generated and saved securely to $CONFIG_FILE"
 fi
 
@@ -55,13 +55,15 @@ COLLECT_SCRIPT_URL="https://raw.githubusercontent.com/Vuxyn/dev-analytics/main/c
 COLLECT_SCRIPT_PATH="$CONFIG_DIR/collect.sh"
 
 echo "Downloading the latest collector script..."
-# Using local for now for testing!
 if [ -f "collector/collect.sh" ]; then
+    # Local dev: use local copy
     cp collector/collect.sh "$COLLECT_SCRIPT_PATH"
 else
-    # Fallback to download (useful when deployed)
-    # curl -sL "$COLLECT_SCRIPT_URL" -o "$COLLECT_SCRIPT_PATH"
-    echo "collect.sh not found locally."
+    # Production: download from GitHub
+    curl -fsSL "$COLLECT_SCRIPT_URL" -o "$COLLECT_SCRIPT_PATH" || {
+        echo "Error: Failed to download collect.sh from GitHub."
+        exit 1
+    }
 fi
 
 chmod +x "$COLLECT_SCRIPT_PATH"
@@ -87,7 +89,15 @@ CRON_JOB="0 * * * * $COLLECT_SCRIPT_PATH >> $CONFIG_DIR/cron.log 2>&1"
 (crontab -l 2>/dev/null | grep -v "$COLLECT_SCRIPT_PATH"; echo "$CRON_JOB") | crontab -
 
 echo ""
-echo "🚀 All Done!"
-echo "Data collection will run in the background every hour."
+echo "======================================"
+echo "Running initial sync (full history)..."
+echo "======================================"
+SYNC_DAYS=all "$COLLECT_SCRIPT_PATH"
+
+echo ""
+echo "All Done!"
+echo "Hourly sync has been set up via cron."
 echo "You can check logs at: $CONFIG_DIR/cron.log"
+echo "Manual sync anytime: $COLLECT_SCRIPT_PATH"
+
 echo "You can manually trigger a sync right now by running: $COLLECT_SCRIPT_PATH"
