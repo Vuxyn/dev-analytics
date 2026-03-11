@@ -5,13 +5,19 @@ router = APIRouter(prefix="/languages", tags=["languages"])
 
 @router.get("")
 async def get_language_stats(
+    username: str,
     repo_id: int = Query(None),
     days: int = Query(None)
 ):
     try:
         async with get_conn() as conn:
-            params = []
-            where_clauses = []
+            user_id = await conn.fetchval("SELECT id FROM users WHERE username = $1", username)
+            if not user_id:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=404, detail="User not found")
+
+            params = [user_id]
+            where_clauses = ["user_id = $1"]
             
             if repo_id:
                 where_clauses.append(f"repo_id = ${len(params) + 1}")

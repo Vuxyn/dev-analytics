@@ -1,165 +1,65 @@
-import { Suspense } from "react";
-import SummaryStats from "@/components/SummaryStats";
-import SessionStats from "@/components/SessionStats";
-import ActivityHeatmap from "@/components/ActivityHeatmap";
-import TopRepos from "@/components/TopRepos";
-import DateFilter from "@/components/DateFilter";
-import LanguageDistribution from "@/components/LanguageDistribution";
+"use client";
 
-export const revalidate = 0; // dynamic because of user searchParams
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-async function getSummary(days: string | null) {
-  const query = days ? `?days=${days}` : "";
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/summary${query}`, {
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => "Unknown error");
-    throw new Error(`Failed to fetch summary: ${res.status} ${res.statusText} - ${errorText}`);
-  }
-  return res.json();
-}
+export default function LandingPage() {
+  const [username, setUsername] = useState("");
+  const router = useRouter();
 
-async function getSessionSummary(days: string | null) {
-  const query = days ? `?days=${days}` : "";
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sessions/summary${query}`, {
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => "Unknown error");
-    throw new Error(`Failed to fetch session summary: ${res.status} ${res.statusText} - ${errorText}`);
-  }
-  return res.json();
-}
-
-async function getHeatmap(days: string | null) {
-  const query = days ? `?days=${days}` : "";
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/heatmap${query}`, {
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => "Unknown error");
-    throw new Error(`Failed to fetch heatmap: ${res.status} ${res.statusText} - ${errorText}`);
-  }
-  return res.json();
-}
-
-async function getRepos(days: string | null) {
-  const query = days ? `?days=${days}` : "";
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/repos${query}`, {
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => "Unknown error");
-    throw new Error(`Failed to fetch repos: ${res.status} ${res.statusText} - ${errorText}`);
-  }
-  return res.json();
-}
-
-async function getLanguageStats(days: string | null) {
-  const query = days ? `?days=${days}` : "";
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/languages${query}`, {
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => "Unknown error");
-    throw new Error(`Failed to fetch languages: ${res.status} ${res.statusText} - ${errorText}`);
-  }
-  return res.json();
-}
-
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-}) {
-  const resolvedParams = await searchParams;
-  const days = typeof resolvedParams.days === "string" ? resolvedParams.days : null;
-
-  const [summary, sessions, heatmap, repos, languages] = await Promise.all([
-    getSummary(days),
-    getSessionSummary(days),
-    getHeatmap(days),
-    getRepos(days),
-    getLanguageStats(days),
-  ]);
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (username.trim()) {
+      router.push(`/u/${username.trim()}`);
+    }
+  };
 
   return (
-    <div className="space-y-8 animate-fade-up">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold text-white tracking-tight">
-            Overview
-          </h1>
-          <p className="text-sm text-zinc-400">
-            Aktivitas coding dari semua branch, {" "}
-            <span className="text-violet-400">bukan cuma master</span>
-          </p>
+    <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8 animate-fade-up">
+      <div className="text-center space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mx-auto mb-6">
+          <div className="w-6 h-6 rounded-md bg-violet-400 opacity-90" />
         </div>
-        <DateFilter />
+        <h1 className="text-4xl font-semibold text-white tracking-tight">
+          dev<span className="text-violet-400">.</span>analytics
+        </h1>
+        <p className="text-zinc-400 max-w-md mx-auto">
+          Enter a GitHub username to view their coding analytics, commits, languages, and coding sessions.
+        </p>
       </div>
 
-      {/* Summary stats */}
-      <Suspense fallback={<StatsSkeleton />}>
-        <SummaryStats data={summary} />
-      </Suspense>
+      <form onSubmit={handleSearch} className="w-full max-w-sm flex flex-col sm:flex-row gap-3">
+        <input
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="GitHub Username"
+          required
+          autoFocus
+          className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 transition-all font-mono"
+        />
+        <button
+          type="submit"
+          className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-xl font-medium transition-colors"
+        >
+          View
+        </button>
+      </form>
 
-      {/* Session stats */}
-      <Suspense fallback={<div className="h-24 bg-white/5 rounded animate-pulse" />}>
-        <SessionStats data={sessions} />
-      </Suspense>
-
-      {/* Heatmap */}
-      <div className="card p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-white">
-            Aktivitas Coding
-          </h2>
-          <span className="stat-badge">semua branch</span>
+      <div className="pt-12 grid grid-cols-1 sm:grid-cols-3 gap-6 text-center max-w-3xl mx-auto w-full">
+        <div className="card p-6 border-white/5">
+          <h3 className="text-white font-medium mb-2">Zero-Config SaaS</h3>
+          <p className="text-sm text-zinc-500">A seamless integration to sync your work in seconds.</p>
         </div>
-        <Suspense fallback={<div className="h-32 bg-white/5 rounded animate-pulse" />}>
-          <ActivityHeatmap data={heatmap} />
-        </Suspense>
-      </div>
-
-      {/* Language distribution */}
-      <div className="card p-6 space-y-4">
-        <h2 className="text-sm font-medium text-white">
-          Bahasa Pemrograman
-        </h2>
-        <Suspense fallback={<div className="h-12 bg-white/5 rounded animate-pulse" />}>
-          <LanguageDistribution data={languages} />
-        </Suspense>
-      </div>
-
-      {/* Top repos */}
-      <div className="card p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-white">
-            Repository Aktif
-          </h2>
-          <a
-            href="/repos"
-            className="text-xs text-violet-400/70 hover:text-violet-400 transition-colors"
-          >
-            lihat semua →
-          </a>
+        <div className="card p-6 border-white/5">
+          <h3 className="text-white font-medium mb-2">Privacy First</h3>
+          <p className="text-sm text-zinc-500">Auto-PIN security blocks anyone else from sending spam to your analytics.</p>
         </div>
-        <Suspense fallback={<div className="h-40 bg-white/5 rounded animate-pulse" />}>
-          <TopRepos data={repos} />
-        </Suspense>
+        <div className="card p-6 border-white/5">
+          <h3 className="text-white font-medium mb-2">Detailed Tracking</h3>
+          <p className="text-sm text-zinc-500">View language stats, active coding hours, and multi-branch repo insights.</p>
+        </div>
       </div>
-    </div>
-  );
-}
-
-function StatsSkeleton() {
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="card p-4 h-24 animate-pulse bg-white/5" />
-      ))}
     </div>
   );
 }

@@ -22,10 +22,10 @@ type TimelineData = {
     timeline: TimelineEntry[];
 };
 
-async function getTimeline(id: string, days: string | null): Promise<TimelineData> {
-    const query = days ? `?days=${days}` : "";
+async function getTimeline(id: string, username: string, days: string | null): Promise<TimelineData> {
+    const query = days ? `&days=${days}` : "";
     const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/timeline/${id}${query}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/timeline/${id}?username=${username}${query}`,
         { cache: "no-store" }
     );
     if (res.status === 404) notFound();
@@ -33,8 +33,9 @@ async function getTimeline(id: string, days: string | null): Promise<TimelineDat
     return res.json();
 }
 
-async function getLanguageStats(id: string, days: string | null) {
+async function getLanguageStats(id: string, username: string, days: string | null) {
     const query = new URLSearchParams();
+    query.set("username", username);
     if (days) query.set("days", days);
     query.set("repo_id", id);
 
@@ -84,16 +85,16 @@ export default async function RepoDetailPage({
     params,
     searchParams,
 }: {
-    params: Promise<{ id: string }>;
+    params: Promise<{ id: string; username: string }>;
     searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-    const { id } = await params;
+    const { id, username } = await params;
     const resolvedParams = await searchParams;
     const days = typeof resolvedParams.days === "string" ? resolvedParams.days : null;
 
     const [data, languages] = await Promise.all([
-        getTimeline(id, days),
-        getLanguageStats(id, days)
+        getTimeline(id, username, days),
+        getLanguageStats(id, username, days)
     ]);
     const { timeline, repo_name } = data;
 
@@ -113,7 +114,7 @@ export default async function RepoDetailPage({
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm text-[#55556a] font-mono">
-                        <a href="/repos" className="hover:text-violet-400 transition-colors">
+                        <a href={`/u/${username}/repos`} className="hover:text-violet-400 transition-colors">
                             repos
                         </a>
                         <span>/</span>

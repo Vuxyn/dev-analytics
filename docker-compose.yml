@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  api:
+    build: 
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: dev-analytics-api
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    container_name: dev-analytics-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  # Optional Next.js Dashboard Self-Host
+  # dashboard:
+  #   build:
+  #     context: ./dashboard
+  #     dockerfile: Dockerfile
+  #   container_name: dev-analytics-dashboard
+  #   ports:
+  #     - "3000:3000"
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - api
+  #   env_file:
+  #     - .env

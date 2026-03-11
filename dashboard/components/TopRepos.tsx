@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useParams } from "next/navigation";
 
 type Repo = {
   id: number;
@@ -26,6 +27,8 @@ function formatDate(dateStr: string | null): string {
 
 export default function TopRepos({ data }: { data: Repo[] }) {
   const [page, setPage] = useState(1);
+  const params = useParams();
+  const username = params?.username as string;
 
   if (!data || data.length === 0) {
     return (
@@ -49,7 +52,7 @@ export default function TopRepos({ data }: { data: Repo[] }) {
         return (
           <Link
             key={repo.id}
-            href={`/repos/${repo.id}`}
+            href={`/u/${username}/repos/${repo.id}`}
             className="block group"
           >
             <div className="card p-4 space-y-3 group-hover:border-violet-500/20 transition-all">

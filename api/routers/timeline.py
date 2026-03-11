@@ -5,19 +5,23 @@ router = APIRouter(prefix="/timeline", tags=["timeline"])
 
 
 @router.get("/{repo_id}")
-async def get_timeline(repo_id: int, days: int = Query(None, description="Filter by last N days")):
+async def get_timeline(repo_id: int, username: str, days: int = Query(None, description="Filter by last N days")):
     try:
         async with get_conn() as conn:
+            user_id = await conn.fetchval("SELECT id FROM users WHERE username = $1", username)
+            if not user_id:
+                raise HTTPException(status_code=404, detail="User not found")
+
             repo = await conn.fetchrow("""
-                SELECT id, name FROM repositories WHERE id = $1
-            """, repo_id)
+                SELECT id, name FROM repositories WHERE id = $1 AND user_id = $2
+            """, repo_id, user_id)
 
             if not repo:
                 raise HTTPException(status_code=404, detail="Repo tidak ditemukan")
 
-            params = [repo_id]
+            params = [repo_id, user_id]
             if days is not None:
-                date_filter = "AND date >= CURRENT_DATE - ($2 * INTERVAL '1 day')"
+                date_filter = "AND date >= CURRENT_DATE - ($3 * INTERVAL '1 day')"
                 params.append(days)
             else:
                 date_filter = ""
@@ -32,7 +36,7 @@ async def get_timeline(repo_id: int, days: int = Query(None, description="Filter
                     active_hours,
                     branches
                 FROM daily_summary
-                WHERE repo_id = $1 {date_filter}
+                WHERE repo_id = $1 AND user_id = $2 {date_filter}
                 ORDER BY date ASC
             """
             rows = await conn.fetch(query, *params)

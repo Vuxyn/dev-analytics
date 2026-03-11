@@ -3,14 +3,19 @@ from database import get_conn
 
 router = APIRouter(prefix="/heatmap", tags=["heatmap"])
 
+from fastapi import HTTPException
 @router.get("")
-async def get_heatmap(days: int = Query(None, description="Filter by last N days")):
+async def get_heatmap(username: str, days: int = Query(None, description="Filter by last N days")):
     try:
         async with get_conn() as conn:
+            user_id = await conn.fetchval("SELECT id FROM users WHERE username = $1", username)
+            if not user_id:
+                raise HTTPException(status_code=404, detail="User not found")
+
             date_filter = ""
-            params = []
+            params = [user_id]
             if days is not None:
-                date_filter = "WHERE date >= CURRENT_DATE - ($1 * INTERVAL '1 day')"
+                date_filter = "AND date >= CURRENT_DATE - ($2 * INTERVAL '1 day')"
                 params.append(days)
 
             query = f"""
@@ -20,7 +25,7 @@ async def get_heatmap(days: int = Query(None, description="Filter by last N days
                     SUM(lines_added) AS lines_added,
                     SUM(lines_removed) AS lines_removed
                 FROM daily_summary
-                {date_filter}
+                WHERE user_id = $1 {date_filter}
                 GROUP BY date
                 ORDER BY date ASC
             """

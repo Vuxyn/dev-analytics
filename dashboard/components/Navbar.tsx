@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-
-const navItems = [
-  { href: "/", label: "Overview" },
-  { href: "/repos", label: "Repositories" },
-];
+import { usePathname, useParams } from "next/navigation";
 
 export default function Navbar() {
   const pathname = usePathname();
+  const params = useParams();
+  const username = params?.username as string | undefined;
+
+  const navItems = username
+    ? [
+        { href: `/u/${username}`, label: "Overview", exact: true },
+        { href: `/u/${username}/repos`, label: "Repositories", exact: false },
+      ]
+    : [{ href: "/", label: "Home", exact: true }];
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/5 backdrop-blur-md bg-[#0a0a0f]/80">
@@ -28,10 +32,9 @@ export default function Navbar() {
           {/* Nav */}
           <nav className="flex items-center gap-1">
             {navItems.map((item) => {
-              const isActive =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
+              const isActive = item.exact
+                ? pathname === item.href
+                : pathname.startsWith(item.href);
               return (
                 <Link
                   key={item.href}

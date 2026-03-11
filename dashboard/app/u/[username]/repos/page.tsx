@@ -14,9 +14,9 @@ type Repo = {
   total_lines_removed: number;
 };
 
-async function getRepos(days: string | null): Promise<Repo[]> {
-  const query = days ? `?days=${days}` : "";
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/repos${query}`, {
+async function getRepos(username: string, days: string | null): Promise<Repo[]> {
+  const query = days ? `&days=${days}` : "";
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/repos?username=${username}${query}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error("Failed to fetch repos");
@@ -24,14 +24,17 @@ async function getRepos(days: string | null): Promise<Repo[]> {
 }
 
 export default async function ReposPage({
+  params,
   searchParams,
 }: {
+  params: Promise<{ username: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const { username } = await params;
   const resolvedParams = await searchParams;
   const days = typeof resolvedParams.days === "string" ? resolvedParams.days : null;
 
-  const repos = await getRepos(days);
+  const repos = await getRepos(username, days);
   const maxCommits = Math.max(...repos.map((r) => r.total_commits), 1);
 
   return (

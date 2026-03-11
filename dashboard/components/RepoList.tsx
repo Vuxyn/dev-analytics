@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useParams } from "next/navigation";
 
 type Repo = {
   id: number;
@@ -42,6 +43,8 @@ export default function RepoList({
   maxCommits: number;
 }) {
   const [page, setPage] = useState(1);
+  const params = useParams();
+  const username = params?.username as string;
   const LIMIT = 6;
   const totalPages = Math.ceil(repos.length / LIMIT);
   const displayRepos = repos.slice((page - 1) * LIMIT, page * LIMIT);
@@ -63,7 +66,7 @@ export default function RepoList({
           return (
             <Link
               key={repo.id}
-              href={`/repos/${repo.id}`}
+              href={`/u/${username}/repos/${repo.id}`}
               className="block group"
               style={{ animationDelay: `${i * 60}ms` }}
             >
