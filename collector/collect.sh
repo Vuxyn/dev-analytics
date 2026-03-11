@@ -80,9 +80,13 @@ for REPO_PATH in "${REPO_PATHS[@]}"; do
         fi
     fi
 
-    # Create temporary array for all commits in this repo
+    # Create temporary files for commits and language stats
     REPO_COMMITS_FILE=$(mktemp /tmp/dev-analytics-commits-XXXXXX.json)
+    REPO_LANGS_FILE=$(mktemp /tmp/dev-analytics-langs-XXXXXX.json)
     echo "[]" > "$REPO_COMMITS_FILE"
+    echo "[]" > "$REPO_LANGS_FILE"
+    declare -A LANG_ADDED
+    declare -A LANG_REMOVED
 
     for BRANCH in $BRANCHES; do
         log "  Branch: $BRANCH"
@@ -117,6 +121,7 @@ for REPO_PATH in "${REPO_PATHS[@]}"; do
         LINES_REMOVED=0
         FILES_CHANGED=0
         BRANCH_COMMIT_COUNT=0
+        CURRENT_DATE=""
 
         write_commit_to_json() {
             [[ -z "$CURRENT_SHA" ]] && return
@@ -124,9 +129,8 @@ for REPO_PATH in "${REPO_PATHS[@]}"; do
 
             COMMITTED_AT=$(date -u -d "@$CURRENT_TS" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null)
             [[ -z "$COMMITTED_AT" ]] && return
+            CURRENT_DATE=$(date -u -d "@$CURRENT_TS" '+%Y-%m-%d' 2>/dev/null)
 
-            # Append the single commit into the repo's commit array
-            # We use jq to handle string escaping correctly
             jq --arg hash "$CURRENT_SHA" \
                --arg branch "$BRANCH" \
                --arg author "$CURRENT_AUTHOR_NAME" \
@@ -159,6 +163,17 @@ for REPO_PATH in "${REPO_PATHS[@]}"; do
                 if [[ "$ADDED" =~ ^[0-9]+$ ]]; then LINES_ADDED=$((LINES_ADDED + ADDED)); fi
                 if [[ "$REMOVED" =~ ^[0-9]+$ ]]; then LINES_REMOVED=$((LINES_REMOVED + REMOVED)); fi
                 FILES_CHANGED=$((FILES_CHANGED + 1))
+
+                # Track language from file extension
+                if [[ -n "$FILE_PATH" && "$ADDED" =~ ^[0-9]+$ && -n "$CURRENT_TS" ]]; then
+                    EXT="${FILE_PATH##*.}"
+                    if [[ "$EXT" != "$FILE_PATH" && -n "$EXT" && ${#EXT} -le 10 ]]; then
+                        LANG_DATE=$(date -u -d "@$CURRENT_TS" '+%Y-%m-%d' 2>/dev/null)
+                        LANG_KEY="${LANG_DATE}__${EXT}"
+                        LANG_ADDED["$LANG_KEY"]=$(( ${LANG_ADDED["$LANG_KEY"]:-0} + ADDED ))
+                        LANG_REMOVED["$LANG_KEY"]=$(( ${LANG_REMOVED["$LANG_KEY"]:-0} + REMOVED ))
+                    fi
+                fi
             fi
         done <<< "$GIT_LOG"
 
@@ -172,14 +187,30 @@ for REPO_PATH in "${REPO_PATHS[@]}"; do
 
     # Attach Repo JSON to the Main Payload Payload
     # If the repo has no commits in the last 30 days, we'll still send it to update its presence
+    # Build language_stats JSON from accumulated LANG_ADDED/LANG_REMOVED
+    for LANG_KEY in "${!LANG_ADDED[@]}"; do
+        LANG_DATE="${LANG_KEY%%__*}"
+        LANG_EXT="${LANG_KEY##*__}"
+        LADD=${LANG_ADDED["$LANG_KEY"]}
+        LREM=${LANG_REMOVED["$LANG_KEY"]:-0}
+        jq --arg lang "$LANG_EXT" \
+           --arg date "$LANG_DATE" \
+           --argjson add "$LADD" \
+           --argjson rem "$LREM" \
+           '. += [{"language": $lang, "date": $date, "lines_added": $add, "lines_removed": $rem}]' \
+           "$REPO_LANGS_FILE" > "$REPO_LANGS_FILE.tmp" && mv "$REPO_LANGS_FILE.tmp" "$REPO_LANGS_FILE"
+    done
+    unset LANG_ADDED LANG_REMOVED
+
     jq --arg name "$REPO_NAME" \
        --arg path "$REPO_PATH" \
        --arg remote "$REMOTE_URL" \
        --slurpfile commits "$REPO_COMMITS_FILE" \
-       '.repositories += [{ "name": $name, "path": $path, "remote": $remote, "commits": $commits[0] }]' \
+       --slurpfile langs "$REPO_LANGS_FILE" \
+       '.repositories += [{ "name": $name, "path": $path, "remote": $remote, "commits": $commits[0], "languages": $langs[0] }]' \
        "$PAYLOAD_FILE" > "$PAYLOAD_FILE.tmp" && mv "$PAYLOAD_FILE.tmp" "$PAYLOAD_FILE"
 
-    rm -f "$REPO_COMMITS_FILE"
+    rm -f "$REPO_COMMITS_FILE" "$REPO_LANGS_FILE"
 
 done
 
