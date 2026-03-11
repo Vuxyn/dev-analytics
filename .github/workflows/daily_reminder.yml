@@ -32,7 +32,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GITHUB_PAT: ${{ secrets.PAT_OMNI_NOTIFIER }}
-          OMNI_NOTIFIER_REPO: "vuxyn/omni-notifier"
+          OMNI_NOTIFIER_REPO: "Vuxyn/omni-notifier"
           SCHEDULE_TIME: ${{ github.event.schedule }}
         run: |
           python api/send_reminder.py
