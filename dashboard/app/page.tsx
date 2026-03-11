@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import SummaryStats from "@/components/SummaryStats";
+import SessionStats from "@/components/SessionStats";
 import ActivityHeatmap from "@/components/ActivityHeatmap";
 import TopRepos from "@/components/TopRepos";
 import DateFilter from "@/components/DateFilter";
@@ -15,6 +16,18 @@ async function getSummary(days: string | null) {
   if (!res.ok) {
     const errorText = await res.text().catch(() => "Unknown error");
     throw new Error(`Failed to fetch summary: ${res.status} ${res.statusText} - ${errorText}`);
+  }
+  return res.json();
+}
+
+async function getSessionSummary(days: string | null) {
+  const query = days ? `?days=${days}` : "";
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/sessions/summary${query}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "Unknown error");
+    throw new Error(`Failed to fetch session summary: ${res.status} ${res.statusText} - ${errorText}`);
   }
   return res.json();
 }
@@ -63,8 +76,9 @@ export default async function HomePage({
   const resolvedParams = await searchParams;
   const days = typeof resolvedParams.days === "string" ? resolvedParams.days : null;
 
-  const [summary, heatmap, repos, languages] = await Promise.all([
+  const [summary, sessions, heatmap, repos, languages] = await Promise.all([
     getSummary(days),
+    getSessionSummary(days),
     getHeatmap(days),
     getRepos(days),
     getLanguageStats(days),
@@ -89,6 +103,11 @@ export default async function HomePage({
       {/* Summary stats */}
       <Suspense fallback={<StatsSkeleton />}>
         <SummaryStats data={summary} />
+      </Suspense>
+
+      {/* Session stats */}
+      <Suspense fallback={<div className="h-24 bg-white/5 rounded animate-pulse" />}>
+        <SessionStats data={sessions} />
       </Suspense>
 
       {/* Heatmap */}

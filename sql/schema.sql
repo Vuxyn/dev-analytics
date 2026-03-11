@@ -62,3 +62,18 @@ CREATE TABLE IF NOT EXISTS language_stats (
 
 CREATE INDEX IF NOT EXISTS idx_language_stats_date ON language_stats(date);
 CREATE INDEX IF NOT EXISTS idx_language_stats_repo ON language_stats(repo_id);
+
+CREATE TABLE coding_sessions (
+    id              SERIAL PRIMARY KEY,
+    repo_id         INTEGER REFERENCES repositories(id) ON DELETE CASCADE,
+    started_at      TIMESTAMP NOT NULL,
+    ended_at        TIMESTAMP NOT NULL,
+    duration_minutes INTEGER NOT NULL,
+    commit_count    INTEGER DEFAULT 0,
+    lines_added     INTEGER DEFAULT 0,
+    lines_removed   INTEGER DEFAULT 0,
+    branches        TEXT[]
+);
+
+CREATE INDEX idx_sessions_repo ON coding_sessions(repo_id);
+CREATE INDEX idx_sessions_started ON coding_sessions(started_at);

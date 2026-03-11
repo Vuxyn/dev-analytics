@@ -347,6 +347,13 @@ SQLEOF
         VALUES ($REPO_ID, $TOTAL_COMMITS_ADDED, '$SYNC_STATUS');
     "
 
+    log "  Calculating coding sessions..."
+    if [[ -d "$PROJECT_DIR/api/venv" ]]; then
+        "$PROJECT_DIR/api/venv/bin/python" "$PROJECT_DIR/api/calculate_sessions.py" "$REPO_ID" --env "$PROJECT_DIR/.env" >> /tmp/dev-analytics-sessions.log 2>&1
+    else
+        python3 "$PROJECT_DIR/api/calculate_sessions.py" "$REPO_ID" --env "$PROJECT_DIR/.env" >> /tmp/dev-analytics-sessions.log 2>&1
+    fi
+
     log "  Done. Commits added: $TOTAL_COMMITS_ADDED"
 
 done
