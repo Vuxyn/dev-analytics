@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Request, Depends, Header
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, date
 import time
+from collections import defaultdict
 
 from database import get_conn
 
@@ -58,8 +59,7 @@ async def check_rate_limit(request: Request):
         if current > MAX_REQUESTS_PER_MINUTE:
             raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
         return
-    except Exception as e:
-        # Fallback if Redis is unavailable or unconfigured
+    except Exception:
         pass
 
     now = time.time()
@@ -106,31 +106,59 @@ async def ingest_commits(payload: IngestPayload, authorization: str = Header(Non
                 RETURNING id
             """, user_id, repo.name, repo.path, repo.remote)
 
-            # Prepare arguments for batch execution
+            # Parse and validate commits
             commit_args = []
+            # daily_summary aggregation: {(date, branch) -> {commits, lines_added, lines_removed, files, hours}}
+            daily: dict = defaultdict(lambda: {"commits": 0, "lines_added": 0, "lines_removed": 0, "files": 0, "hours": set(), "branches": set()})
+
             for commit in repo.commits:
                 try:
-                    # Parse the ISO format date. The collector returns proper UTC (Z / +00:00).
-                    # asyncpg expects a naive datetime for a TIMESTAMP column (storing it as UTC conceptually).
                     committed_at = datetime.fromisoformat(commit.date.replace("Z", "+00:00"))
-                    committed_at = committed_at.replace(tzinfo=None) # Strip timezone
+                    committed_at = committed_at.replace(tzinfo=None)
                 except ValueError:
-                    continue # Skip invalid dates
-                
+                    continue
+
                 commit_args.append((
                     repo_id, user_id, commit.hash, commit.branch,
                     commit.author, commit.email, commit.message,
                     commit.insertions, commit.deletions, commit.files, committed_at
                 ))
-            
+
+                day = committed_at.date()
+                key = day
+                daily[key]["commits"] += 1
+                daily[key]["lines_added"] += commit.insertions
+                daily[key]["lines_removed"] += commit.deletions
+                daily[key]["files"] += commit.files
+                daily[key]["hours"].add(committed_at.hour)
+                daily[key]["branches"].add(commit.branch)
+
+            # Batch insert commits
             if commit_args:
                 await conn.executemany("""
                     INSERT INTO commits (repo_id, user_id, sha, branch, author_name, author_email, message, lines_added, lines_removed, files_changed, committed_at)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                     ON CONFLICT (repo_id, sha) DO NOTHING
                 """, commit_args)
-                # Note: executemany with ON CONFLICT doesn't return the exact number of rows inserted in asyncpg.
-                # We count the number of processed records instead.
                 total_inserted += len(commit_args)
+
+            # Upsert daily_summary
+            for day, agg in daily.items():
+                await conn.execute("""
+                    INSERT INTO daily_summary (repo_id, user_id, date, commit_count, lines_added, lines_removed, files_changed, active_hours, branches)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    ON CONFLICT (repo_id, date, user_id)
+                    DO UPDATE SET
+                        commit_count  = daily_summary.commit_count  + EXCLUDED.commit_count,
+                        lines_added   = daily_summary.lines_added   + EXCLUDED.lines_added,
+                        lines_removed = daily_summary.lines_removed + EXCLUDED.lines_removed,
+                        files_changed = daily_summary.files_changed + EXCLUDED.files_changed,
+                        active_hours  = EXCLUDED.active_hours,
+                        branches      = EXCLUDED.branches
+                """,
+                    repo_id, user_id, day,
+                    agg["commits"], agg["lines_added"], agg["lines_removed"], agg["files"],
+                    list(agg["hours"]), list(agg["branches"])
+                )
 
         return {"status": "success", "message": f"Processed {total_inserted} commits for {username}."}
