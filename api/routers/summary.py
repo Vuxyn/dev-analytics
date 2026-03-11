@@ -29,21 +29,41 @@ async def get_summary(username: str, days: int = Query(None, description="Filter
                     MIN(date) AS first_commit_date,
                     MAX(date) AS last_commit_date
                 FROM daily_summary
+                WHERE user_id = $1
                 {date_filter}
             """
             stats = await conn.fetchrow(stats_query, *params)
 
-            most_active_query = f"""
-                SELECT
-                    r.name,
-                    COALESCE(SUM(ds.commit_count), 0) AS total_commits
-                FROM repositories r
-                LEFT JOIN daily_summary ds ON ds.repo_id = r.id AND ({'ds.date >= CURRENT_DATE - ($1 * INTERVAL \'1 day\')' if days is not None else 'TRUE'})
-                GROUP BY r.id, r.name
-                ORDER BY total_commits DESC
-                LIMIT 3
-            """
-            most_active = await conn.fetch(most_active_query, *params)
+            # most_active uses its own param list
+            if days is not None:
+                most_active_query = """
+                    SELECT r.name,
+                           COALESCE(SUM(ds.commit_count), 0) AS total_commits
+                    FROM repositories r
+                    LEFT JOIN daily_summary ds
+                          ON ds.repo_id = r.id
+                         AND ds.user_id = $1
+                         AND ds.date >= CURRENT_DATE - ($2 * INTERVAL '1 day')
+                    WHERE r.user_id = $1
+                    GROUP BY r.id, r.name
+                    ORDER BY total_commits DESC
+                    LIMIT 3
+                """
+                most_active = await conn.fetch(most_active_query, user_id, days)
+            else:
+                most_active_query = """
+                    SELECT r.name,
+                           COALESCE(SUM(ds.commit_count), 0) AS total_commits
+                    FROM repositories r
+                    LEFT JOIN daily_summary ds
+                          ON ds.repo_id = r.id
+                         AND ds.user_id = $1
+                    WHERE r.user_id = $1
+                    GROUP BY r.id, r.name
+                    ORDER BY total_commits DESC
+                    LIMIT 3
+                """
+                most_active = await conn.fetch(most_active_query, user_id)
 
         return {
             "total_repos": stats["total_repos"],
