@@ -90,7 +90,8 @@ CREATE TABLE coding_sessions (
     commit_count    INTEGER DEFAULT 0,
     lines_added     INTEGER DEFAULT 0,
     lines_removed   INTEGER DEFAULT 0,
-    branches        TEXT[]
+    branches        TEXT[],
+    UNIQUE(user_id, started_at)
 );
 
 CREATE INDEX idx_sessions_repo ON coding_sessions(repo_id);
