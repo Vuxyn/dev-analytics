@@ -158,10 +158,10 @@ async def ingest_commits(payload: IngestPayload, authorization: str = Header(Non
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                     ON CONFLICT (repo_id, date, user_id)
                     DO UPDATE SET
-                        commit_count  = daily_summary.commit_count  + EXCLUDED.commit_count,
-                        lines_added   = daily_summary.lines_added   + EXCLUDED.lines_added,
-                        lines_removed = daily_summary.lines_removed + EXCLUDED.lines_removed,
-                        files_changed = daily_summary.files_changed + EXCLUDED.files_changed,
+                        commit_count  = EXCLUDED.commit_count,
+                        lines_added   = EXCLUDED.lines_added,
+                        lines_removed = EXCLUDED.lines_removed,
+                        files_changed = EXCLUDED.files_changed,
                         active_hours  = EXCLUDED.active_hours,
                         branches      = EXCLUDED.branches
                 """,
@@ -181,8 +181,8 @@ async def ingest_commits(payload: IngestPayload, authorization: str = Header(Non
                     VALUES ($1, $2, $3, $4, $5, $6)
                     ON CONFLICT (repo_id, date, language, user_id)
                     DO UPDATE SET
-                        lines_added   = language_stats.lines_added   + EXCLUDED.lines_added,
-                        lines_removed = language_stats.lines_removed + EXCLUDED.lines_removed
+                        lines_added   = EXCLUDED.lines_added,
+                        lines_removed = EXCLUDED.lines_removed
                 """, repo_id, user_id, lang_date, lang.language, lang.lines_added, lang.lines_removed)
 
         # 3. Cross-repo session detection (gap > 2 hours = new session)
@@ -231,6 +231,13 @@ async def ingest_commits(payload: IngestPayload, authorization: str = Header(Non
                         (repo_id, user_id, started_at, ended_at, duration_minutes,
                          commit_count, lines_added, lines_removed, branches)
                     VALUES (NULL, $1, $2, $3, $4, $5, $6, $7, $8)
+                    ON CONFLICT (user_id, started_at) DO UPDATE SET
+                        ended_at         = EXCLUDED.ended_at,
+                        duration_minutes = EXCLUDED.duration_minutes,
+                        commit_count     = EXCLUDED.commit_count,
+                        lines_added      = EXCLUDED.lines_added,
+                        lines_removed    = EXCLUDED.lines_removed,
+                        branches         = EXCLUDED.branches
                 """, sessions)
 
         return {"status": "success", "message": f"Processed {total_inserted} commits for {username}."}
